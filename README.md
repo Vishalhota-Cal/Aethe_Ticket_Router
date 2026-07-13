@@ -3,19 +3,27 @@
 **Odyssey 2026 · Port·04 — The Senate of Gods**
 Built by **Vishal Hota**, AI Intern, Calfus
 
+![Agentic AI](https://img.shields.io/badge/Agentic%20AI-4%20Coordinated%20Agents-6D5BD0?style=for-the-badge&logo=robotframework&logoColor=white)
+![RAG](https://img.shields.io/badge/RAG-Self--Growing%20Knowledge%20Base-7F77DD?style=for-the-badge&logo=OpenAI&logoColor=white)
+![Self Repairing](https://img.shields.io/badge/Validation-Self--Repairing-059669?style=for-the-badge&logo=checkmarx&logoColor=white)
+![Resilient](https://img.shields.io/badge/Resilience-Retry%20%2B%20Backoff-EA580C?style=for-the-badge&logo=fireship&logoColor=white)
+
 > "Support teams are drowning in tickets. What if the ticket routed itself?"
 
 ---
 
-## The story
+## 🐙 The story
 
 Every support team has the same 2am problem: a wall of tickets, no consistent way to triage them, and a human somewhere deciding — half by instinct, half by fatigue — what's urgent, who owns it, and how annoyed the customer sounds. That judgment call, repeated hundreds of times a day, is exactly the kind of structured, repeatable decision an AI agent pipeline is good at making faster and more consistently than a tired human at the end of a shift.
 
-Aetherion Ticket Router is that pipeline: four coordinated agents that take a raw support message and hand back a fully structured decision — category, priority, assigned team, one-line reasoning, a confidence score, and the customer's emotional tone — as clean, validated JSON. Not a single black-box prompt. An actual orchestrated system, with the same resilience, self-correction, and grounding techniques a production AI system needs, built from scratch to understand *why* each piece exists.
+Aetherion Ticket Router is that pipeline: **four coordinated AI agents** that take a raw support message and hand back a fully structured decision — category, priority, assigned team, one-line reasoning, a confidence score, and the customer's emotional tone — as clean, validated JSON.
+
+> ### 🤖 The headline feature: this is genuinely agentic, not one prompt wearing a trench coat.
+> Every ticket passes through **four separate agents** — Retrieval, Triage, Validation, Review — each with one job, each independently testable, coordinated by a single orchestrator through a shared context object. Swap any one agent out and the other three don't need to know or care. That's the actual architectural bet this project makes, and everything else (RAG, resilience, self-repair) is built on top of it.
 
 ---
 
-## Why this isn't just "call an LLM and hope"
+## ⚡ Why this isn't just "call an LLM and hope"
 
 | Problem with the naive approach | What this project does instead |
 |---|---|
@@ -27,7 +35,7 @@ Aetherion Ticket Router is that pipeline: four coordinated agents that take a ra
 
 ---
 
-## Architecture: how one ticket actually flows through the system
+## 🤖 Agentic Architecture — the star of the show
 
 ```mermaid
 flowchart LR
@@ -50,9 +58,20 @@ flowchart LR
 
 Every arrow above is a real, tested code path — not a simplification. The dotted line back into the Retrieval Agent is the important one: this system gets *better reference data* the more it's used, without needing anyone to hand-curate a training set.
 
+### The agent roster
+
+| | Agent | Single responsibility | Calls an LLM? |
+|---|---|---|---|
+| 🔍 | **Retrieval Agent** | Embeds the ticket, finds similar past tickets (RAG) | Embeddings call only |
+| 💬 | **Triage Agent** | Classifies category, priority, team, sentiment, confidence | ✅ Yes |
+| ✅ | **Validation Agent** | Enforces the JSON schema, self-repairs malformed output | Only if a repair is needed |
+| 👁 | **Review Agent** | Deterministic escalation rules — no guessing | ❌ No — pure business logic |
+
+Four agents, four narrow jobs, one shared `TicketContext` passed hand to hand between them. That separation is what makes every piece of this system — the RAG layer, the retry/backoff resilience, the self-repair loop — independently swappable and independently testable, instead of one giant prompt trying to do everything at once.
+
 ---
 
-## RAG: where it's used, and why
+## 🔎 RAG: where it's used, and why
 
 **Where:** `agents/retrieval_agent.py` runs first, before triage. It embeds the incoming ticket's text, compares it by cosine similarity (`rag/retriever.py`, pure NumPy) against every past ticket's saved embedding in SQLite, and hands the top 3 matches to `TriageAgent` as soft reference context in the prompt: *"here's how similar past tickets were actually routed."*
 
@@ -77,7 +96,7 @@ RAG here is a genuine enhancement layer, not a hard dependency: if the embedding
 
 ---
 
-## Resilience: proving it, not just claiming it
+## 🛡 Resilience: proving it, not just claiming it
 
 `orchestration/resilience.py` wraps every LLM call in retry-with-exponential-backoff (3 attempts, 1s then 2s delay). Rather than asking you to trust that this code "looks right," the Single Ticket tab has a **"Simulate a transient AI failure"** checkbox that deliberately routes the call through a `FlakyClient` wrapper (`llm/flaky_client.py`) which fails the first two attempts on purpose. Submit it, and watch the real retry log:
 
@@ -102,7 +121,7 @@ A standalone script, `scripts/demo_retry_proof.py`, runs this exact scenario out
 
 ---
 
-## V1 → V2: how this evolved
+## 📈 V1 → V2: how this evolved
 
 | Stage | What it added |
 |---|---|
@@ -114,7 +133,7 @@ A standalone script, `scripts/demo_retry_proof.py`, runs this exact scenario out
 
 ---
 
-## Quickstart
+## 🚀 Quickstart
 
 ```bash
 python3 -m venv venv
@@ -158,7 +177,7 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 
 ---
 
-## Demoing it
+## 🎬 Demoing it
 
 1. **Single Ticket tab** — submit a ticket and watch the "Agent Orchestration" panel light up as `RetrievalAgent`, `TriageAgent`, `ValidationAgent`, and `ReviewAgent` each complete, with real measured durations. If a similar past ticket exists, a "Similar Tickets Used (RAG)" panel appears showing exactly what was retrieved and its similarity score. The full raw JSON response is shown at the bottom with a one-click copy button.
 2. **Batch Upload (CSV) tab** — upload `sample_tickets_20.csv` (20 tickets, every category and priority, with the 3 required edge cases embedded). Shows a results table, summary stats, and a documented manual-vs-AI time comparison.
@@ -167,7 +186,20 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 
 ---
 
-## Tech stack
+## 🛠 Tech stack
+
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)
+![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white)
+![NumPy](https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white)
+![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![Uvicorn](https://img.shields.io/badge/Uvicorn-2A2A2A?style=for-the-badge)
 
 | Layer | Choice | Why |
 |---|---|---|
@@ -183,7 +215,7 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 
 ---
 
-## Mission deliverables checklist
+## ✅ Mission deliverables checklist
 
 - [x] Design prompts that consistently return valid structured JSON
 - [x] Handle 3 edge cases: angry tone, very short message, ambiguous ticket
@@ -194,7 +226,7 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 
 ---
 
-## How it works, in one paragraph
+## 📜 How it works, in one paragraph
 
 A ticket arrives and is first passed to the **Retrieval Agent**, which embeds it and pulls back the most similar tickets ever routed before. The **Triage Agent** asks the configured LLM for category, priority, team, reasoning, confidence, and sentiment — in one call, using those similar past tickets as reference — instead of five separate calls. The **Validation Agent** checks that response against a strict schema; if it's malformed, it shows the AI its own mistake and asks for a correction, up to twice, before falling back to a safe, human-flagged default rather than crashing. The **Review Agent** applies fixed, deterministic rules (confidence threshold, security category, angry/frustrated tone, very short tickets, any repair having occurred) to decide the final `needs_human_review` value — no AI call, so every escalation is explainable. The orchestrator times and logs every step under a per-ticket correlation ID, and saves the full result, trace, and embedding to SQLite — which is exactly what the next ticket's Retrieval Agent will search through.
 
@@ -202,7 +234,7 @@ Full architectural detail, design rationale, and a beginner-friendly walkthrough
 
 ---
 
-## Project structure
+## 🗂 Project structure
 
 ```
 src/ticket_router/
@@ -225,7 +257,7 @@ tests/
 
 ---
 
-## Known limitations / not yet built
+## ⚠️ Known limitations / not yet built
 
 - Repository calls are synchronous SQLAlchemy calls made directly inside async code — fine at this scale, a production system would use an async driver or a thread pool.
 - No auth or rate limiting — anyone reaching the API can submit unlimited tickets (and OpenAI spend). Fine for a demo, not for production.
