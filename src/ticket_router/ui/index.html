@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Smart Ticket Router</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #111827;
+    background: radial-gradient(ellipse at 25% 0%, #E9D8FD 0%, #FBE4F0 32%, #FDFBFF 62%, #FFFFFF 100%);
+    min-height: 100vh;
+    padding: 32px 48px 60px 48px;
+  }
+  .header-pill {
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 999px;
+    padding: 10px 10px 10px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.2rem;
+    box-shadow: 0 8px 30px rgba(80,60,140,0.08);
+    margin-bottom: 2.4rem;
+    width: 100%;
+  }
+  .header-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .header-logo-icon { display: block; flex-shrink: 0; }
+  .header-logo { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
+  .header-tagline {
+    font-size: 0.78rem; font-weight: 500; color: #9CA3AF; white-space: nowrap;
+    padding-left: 10px; margin-left: 2px; border-left: 1px solid rgba(0,0,0,0.08);
+  }
+  .header-nav-links { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+  .header-nav-links .nav-tag {
+    font-size: 0.86rem; font-weight: 500; color: #374151; letter-spacing: normal;
+    background: none; padding: 0;
+  }
+  .header-cta-btn {
+    background: #3454F4; color: #fff; border: none; border-radius: 999px;
+    padding: 10px 22px; font-weight: 600; font-size: 0.86rem; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif; white-space: nowrap; flex-shrink: 0;
+    transition: transform 0.15s ease;
+  }
+  .header-cta-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(52,84,244,0.3); }
+  .hero-title { font-size: 2.6rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.5rem 0; }
+  .hero-subtitle { color: #4B5563; font-size: 1.02rem; max-width: 680px; margin-bottom: 2.2rem; }
+
+  /* Orchestration diagram */
+  .orchestration-card {
+    background: rgba(255,255,255,0.85);
+    border: 1px solid rgba(0,0,0,0.05);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(80,60,140,0.07);
+    padding: 1.8rem 2rem;
+    margin-bottom: 2.4rem;
+  }
+  .orchestration-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.3rem; }
+  .orchestration-subtitle { color: #6B7280; font-size: 0.85rem; margin-bottom: 1.6rem; }
+  .flow-row { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .flow-node {
+    flex: 1; min-width: 160px;
+    background: #FAFAFB; border: 1px solid rgba(0,0,0,0.06); border-radius: 16px;
+    padding: 1rem 1.1rem; text-align: left; position: relative; transition: all 0.3s ease;
+  }
+  .flow-node.orchestrator-node { background: #F3F0FA; border-color: rgba(109,91,208,0.25); }
+  .flow-node .node-icon { font-size: 1.2rem; margin-bottom: 6px; display: block; }
+  .flow-node .node-name { font-weight: 700; font-size: 0.92rem; margin-bottom: 2px; }
+  .flow-node .node-desc { color: #6B7280; font-size: 0.74rem; line-height: 1.3; }
+  .flow-node .node-status {
+    margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+    color: #9CA3AF;
+  }
+  .flow-node.pending .status-dot { background: #D1D5DB; }
+  .flow-node.running .status-dot { background: #F59E0B; animation: pulse 1s infinite; }
+  .flow-node.done .status-dot { background: #059669; }
+  .flow-node.failed .status-dot { background: #DC2626; }
+  .status-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .flow-arrow { flex: 0 0 34px; text-align: center; color: #C4B5FD; font-size: 1.3rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.4rem; }
+  .tab-btn {
+    background: none; border: none; padding: 8px 4px; margin-right: 20px; font-size: 0.95rem;
+    font-weight: 600; color: #9CA3AF; cursor: pointer; border-bottom: 2px solid transparent;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .tab-btn.active { color: #111827; border-bottom-color: #3454F4; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem; align-items: start; }
+  .glass-card {
+    background: rgba(255,255,255,0.85); border: 1px solid rgba(0,0,0,0.05); border-radius: 20px;
+    padding: 1.6rem 1.6rem 1.4rem 1.6rem; box-shadow: 0 10px 40px rgba(80,60,140,0.07);
+  }
+  .glass-card h3 { margin: 0 0 1rem 0; font-size: 1rem; }
+  label { display: block; font-size: 0.82rem; color: #4B5563; margin-bottom: 4px; font-weight: 600; }
+  input[type="text"], textarea, input[type="file"] {
+    width: 100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 10px 14px;
+    font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; margin-bottom: 1rem; background: #fff; color: #111827;
+  }
+  textarea { resize: vertical; min-height: 100px; }
+  button.primary-btn {
+    background: #3454F4; color: white; border: none; border-radius: 999px; padding: 10px 26px;
+    font-weight: 600; font-size: 0.92rem; cursor: pointer; font-family: 'Space Grotesk', sans-serif;
+    transition: transform 0.15s ease;
+  }
+  button.primary-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(52,84,244,0.3); }
+  button.primary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .badge-pill {
+    display: inline-block; padding: 5px 14px; border-radius: 999px; font-size: 0.82rem;
+    font-weight: 600; margin-right: 8px; margin-bottom: 8px;
+  }
+  .confidence-mono { font-family: 'JetBrains Mono', monospace; font-size: 1.7rem; font-weight: 600; color: #6D5BD0; }
+  .placeholder-text { color: #9CA3AF; font-size: 0.9rem; }
+  .error-text { color: #B91C1C; font-size: 0.85rem; }
+
+  .progress-track { background: #F3F4F6; border-radius: 999px; height: 8px; overflow: hidden; margin: 10px 0; }
+  .progress-fill { background: #3454F4; height: 100%; width: 0%; transition: width 0.2s ease; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.8rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+  th { color: #6B7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+
+  .stats-row { display: flex; gap: 2rem; margin-top: 1.2rem; }
+  .stat-number { font-size: 1.7rem; font-weight: 700; color: #6D5BD0; }
+  .stat-label { color: #6B7280; font-size: 0.8rem; }
+
+  .footer-note { color: #9CA3AF; font-size: 0.78rem; margin-top: 2.5rem; letter-spacing: 0.03em; }
+
+  .simulate-toggle {
+    display: flex; align-items: center; gap: 8px; font-size: 0.82rem;
+    color: #4B5563; font-weight: 600; margin-bottom: 1rem; cursor: pointer;
+  }
+  .simulate-toggle input { width: auto; margin: 0; }
+
+  .retry-log-card { margin-top: -1.2rem; margin-bottom: 2.4rem; }
+  .retry-entry {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 9px 14px; border-radius: 10px; margin-bottom: 6px;
+    font-size: 0.82rem; border-left: 3px solid #D1D5DB; background: #FAFAFB;
+  }
+  .retry-entry.success { border-left-color: #059669; }
+  .retry-entry.failure { border-left-color: #DC2626; background: rgba(220,38,38,0.05); }
+  .retry-entry .retry-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #6B7280; min-width: 230px;
+  }
+  .retry-entry .retry-msg { color: #374151; }
+  .retry-entry.success .retry-msg strong { color: #059669; }
+  .retry-entry.failure .retry-msg strong { color: #DC2626; }
+
+  .rag-context-card { margin-top: -1.2rem; margin-bottom: 2.4rem; }
+  .rag-entry {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 9px 14px; border-radius: 10px; margin-bottom: 6px;
+    font-size: 0.82rem; border-left: 3px solid #7F77DD; background: #FAFAFB;
+  }
+  .rag-entry .rag-subject { font-weight: 600; color: #111827; }
+  .rag-entry .rag-meta { color: #6B7280; }
+  .rag-entry .rag-score {
+    margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+    color: #6D5BD0; background: #F3F0FA; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+
+  .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .card-header-row h3 { margin: 0; }
+  .refresh-btn {
+    background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 999px;
+    padding: 5px 14px; font-size: 0.75rem; font-weight: 600; color: #4B5563; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .refresh-btn:hover { background: #FAFAFB; }
+
+  .ticket-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-radius: 10px;
+    cursor: pointer; border-bottom: 1px solid rgba(0,0,0,0.05); transition: background 0.15s ease;
+  }
+  .ticket-row:hover { background: #FAFAFB; }
+  .ticket-row.selected { background: #F3F0FA; }
+  .ticket-row .row-priority-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .ticket-row .row-main { flex: 1; min-width: 0; }
+  .ticket-row .row-subject {
+    font-weight: 600; font-size: 0.88rem; color: #111827; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .ticket-row .row-meta { font-size: 0.74rem; color: #9CA3AF; margin-top: 2px; }
+  .ticket-row .row-review-flag { color: #DC2626; font-size: 0.9rem; flex-shrink: 0; }
+  .ticket-row .row-date { font-size: 0.72rem; color: #9CA3AF; flex-shrink: 0; white-space: nowrap; }
+  .ticket-list-scroll { max-height: 560px; overflow-y: auto; }
+
+  .json-box {
+    margin-top: 1.2rem; background: #111827; border-radius: 12px; padding: 14px 16px;
+    position: relative;
+  }
+  .json-box-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+  }
+  .json-box-label {
+    color: #9CA3AF; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .copy-btn {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 999px;
+    padding: 4px 12px; font-size: 0.72rem; font-weight: 600; color: #E5E7EB; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); }
+  .copy-btn.copied { background: rgba(5,150,105,0.25); color: #6EE7B7; border-color: rgba(5,150,105,0.4); }
+  .json-box pre {
+    margin: 0; max-height: 260px; overflow: auto; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem; line-height: 1.5; color: #D1D5DB; white-space: pre-wrap; word-break: break-word;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header-pill">
+    <div class="header-brand">
+      <svg class="header-logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="2.1" fill="#3454F4"/>
+        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none"/>
+        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none" transform="rotate(60 12 12)"/>
+        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none" transform="rotate(120 12 12)"/>
+      </svg>
+      <span class="header-logo">Aetherion</span>
+      <span class="header-tagline">Ticket Router</span>
+    </div>
+    <div class="header-nav-links">
+      <span class="nav-tag">Multi-Agent</span>
+      <span class="nav-tag">OpenAI-Backed</span>
+      <span class="nav-tag">Self-Repairing</span>
+    </div>
+    <button class="header-cta-btn" onclick="document.getElementById('tab-single').scrollIntoView({behavior:'smooth', block:'start'})">Try it live</button>
+  </div>
+
+  <div class="hero-title">Intent is the ticket.<br/>Agents are the response.</div>
+  <div class="hero-subtitle">
+    Every ticket is classified, prioritized, validated, and reviewed by a coordinated
+    team of specialized agents -- not a single black-box call. This is the actual
+    orchestration running underneath every request below.
+  </div>
+
+  <!-- ORCHESTRATION DIAGRAM -->
+  <div class="orchestration-card">
+    <div class="orchestration-title">Agent Orchestration</div>
+    <div class="orchestration-subtitle">One orchestrator coordinates four specialized agents for every ticket. Submit one below to see it run live.</div>
+    <div class="flow-row">
+      <div class="flow-node orchestrator-node">
+        <span class="node-icon">&#9906;</span>
+        <div class="node-name">Orchestrator</div>
+        <div class="node-desc">Sequences the agents, handles failure, saves the result.</div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node pending" id="node-retrieval">
+        <span class="node-icon">&#128269;</span>
+        <div class="node-name">Retrieval Agent</div>
+        <div class="node-desc">Finds similar past tickets via embeddings + cosine similarity (RAG).</div>
+        <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node pending" id="node-triage">
+        <span class="node-icon">&#128172;</span>
+        <div class="node-name">Triage Agent</div>
+        <div class="node-desc">Classifies category, priority, and team in one AI call.</div>
+        <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node pending" id="node-validation">
+        <span class="node-icon">&#9989;</span>
+        <div class="node-name">Validation Agent</div>
+        <div class="node-desc">Checks the schema, self-repairs bad AI output, retries.</div>
+        <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+      </div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node pending" id="node-review">
+        <span class="node-icon">&#128065;</span>
+        <div class="node-name">Review Agent</div>
+        <div class="node-desc">Deterministic rules decide if a human should check it.</div>
+        <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE RETRY / ANOMALY LOG (hidden until a request actually logs something) -->
+  <div class="orchestration-card retry-log-card" id="retry-log-card" style="display:none;">
+    <div class="orchestration-title" style="font-size:0.92rem;">Live Retry &amp; Anomaly Log</div>
+    <div class="orchestration-subtitle" id="retry-log-subtitle"></div>
+    <div id="retry-log-entries"></div>
+  </div>
+
+  <!-- SIMILAR TICKETS USED (RAG) -- hidden until the knowledge base has at least one match -->
+  <div class="orchestration-card rag-context-card" id="rag-context-card" style="display:none;">
+    <div class="orchestration-title" style="font-size:0.92rem;">Similar Tickets Used (RAG)</div>
+    <div class="orchestration-subtitle" id="rag-context-subtitle"></div>
+    <div id="rag-context-entries"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('single')">Single Ticket</button>
+    <button class="tab-btn" onclick="switchTab('batch')">Batch Upload (CSV)</button>
+    <button class="tab-btn" onclick="switchTab('past')">Past Tickets</button>
+  </div>
+
+  <!-- SINGLE TICKET TAB -->
+  <div id="tab-single" class="tab-panel active">
+    <div class="grid-2">
+      <div class="glass-card">
+        <h3>Submit a ticket</h3>
+        <label>Subject</label>
+        <input type="text" id="subject-input" value="Can't log in - urgent, demo in 30 minutes" />
+        <label>Description</label>
+        <textarea id="description-input">I've been locked out of my account for the last 2 hours. I have a client demo in 30 minutes and really need this fixed immediately.</textarea>
+        <label class="simulate-toggle" for="simulate-failure-input">
+          <input type="checkbox" id="simulate-failure-input" />
+          Simulate a transient AI failure (proves the retry/backoff logic live)
+        </label>
+        <button class="primary-btn" id="route-btn" onclick="routeTicket()">Route ticket</button>
+      </div>
+      <div class="glass-card">
+        <h3>Routing decision</h3>
+        <div id="result-panel"><p class="placeholder-text">Submit a ticket to see the routing decision here.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH TAB -->
+  <div id="tab-batch" class="tab-panel">
+    <div class="glass-card">
+      <h3>Upload a CSV of tickets</h3>
+      <p class="placeholder-text">Expected columns: <code>id</code> (optional), <code>subject</code>, <code>description</code>. Simple CSV only (no commas inside quoted fields).</p>
+      <input type="file" id="csv-input" accept=".csv" />
+      <button class="primary-btn" id="batch-btn" onclick="routeBatch()" disabled>Route all tickets</button>
+      <div class="progress-track" id="progress-track" style="display:none;">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div id="batch-results"></div>
+    </div>
+  </div>
+
+  <!-- PAST TICKETS TAB -->
+  <div id="tab-past" class="tab-panel">
+    <div class="grid-2">
+      <div class="glass-card">
+        <div class="card-header-row">
+          <h3>Past Tickets</h3>
+          <button class="refresh-btn" onclick="loadPastTickets()">Refresh</button>
+        </div>
+        <div id="past-tickets-list" class="ticket-list-scroll"><p class="placeholder-text">Loading...</p></div>
+      </div>
+      <div class="glass-card">
+        <h3>Ticket detail</h3>
+        <div id="past-ticket-detail"><p class="placeholder-text">Select a ticket from the list to see its full detail and agent trace.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">AI Smart Ticket Router -- built by Vishal Hota, Calfus.</div>
+
+<script>
+const PRIORITY_COLORS = {
+  "Critical": ["#DC2626", "rgba(220,38,38,0.10)"],
+  "High": ["#EA580C", "rgba(234,88,12,0.10)"],
+  "Medium": ["#CA8A04", "rgba(202,138,4,0.10)"],
+  "Low": ["#059669", "rgba(5,150,105,0.10)"],
+};
+
+let parsedRows = [];
+let lastRoutingResponse = null;
+
+function copyJsonToClipboard() {
+  if (!lastRoutingResponse) return;
+  const btn = document.getElementById("copy-json-btn");
+  const text = JSON.stringify(lastRoutingResponse, null, 2);
+
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("copied");
+    }, 1500);
+  }).catch(() => {
+    btn.textContent = "Copy failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+  });
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add("active");
+  document.getElementById(`tab-${name}`).classList.add("active");
+  if (name === "past") loadPastTickets();
+}
+
+function setNodeState(nodeId, state, statusText) {
+  const node = document.getElementById(nodeId);
+  node.className = `flow-node ${state}`;
+  node.querySelector(".status-text").textContent = statusText;
+}
+
+function resetNodes() {
+  ["node-retrieval", "node-triage", "node-validation", "node-review"].forEach(id => setNodeState(id, "pending", "Idle"));
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function routeTicketRequest(id, subject, description, simulateFailure) {
+  const response = await fetch("/tickets/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, subject, description, simulate_failure: !!simulateFailure }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`${response.status} - ${text}`);
+  }
+  return response.json();
+}
+
+function renderRetryLog(retryLog) {
+  const card = document.getElementById("retry-log-card");
+  const entries = document.getElementById("retry-log-entries");
+  const subtitle = document.getElementById("retry-log-subtitle");
+
+  // A clean run logs one successful attempt per agent -- that's not an
+  // "anomaly," so the panel should stay hidden unless something actually
+  // failed or had to be retried/repaired more than once.
+  const hasFailure = (retryLog || []).some(e => !e.success);
+  const hasRetry = (retryLog || []).some(e => e.attempt_number > 1);
+
+  if (!retryLog || retryLog.length === 0 || (!hasFailure && !hasRetry)) {
+    card.style.display = "none";
+    entries.innerHTML = "";
+    return;
+  }
+
+  const failures = retryLog.filter(e => !e.success).length;
+  subtitle.textContent = `${retryLog.length} attempt(s) logged for this request -- ${failures} failure(s) recovered from. This is the real retry/repair history, not a simulation of the UI.`;
+
+  entries.innerHTML = retryLog.map(e => {
+    const cls = e.success ? "success" : "failure";
+    const label = e.success ? "Succeeded" : "Failed";
+    const msg = e.success ? "Returned a usable response." : (e.error_message || "Unknown error");
+    return `
+      <div class="retry-entry ${cls}">
+        <span class="retry-tag">${e.agent_name} -- attempt ${e.attempt_number}</span>
+        <span class="retry-msg"><strong>${label}:</strong> ${msg}</span>
+      </div>
+    `;
+  }).join("");
+
+  card.style.display = "block";
+}
+
+function renderRagContext(retrievedContext) {
+  const card = document.getElementById("rag-context-card");
+  const entries = document.getElementById("rag-context-entries");
+  const subtitle = document.getElementById("rag-context-subtitle");
+
+  if (!retrievedContext || retrievedContext.length === 0) {
+    card.style.display = "none";
+    entries.innerHTML = "";
+    return;
+  }
+
+  subtitle.textContent = `The triage prompt was given these ${retrievedContext.length} similar past ticket(s) as reference -- found by embedding this ticket and ranking the database by cosine similarity, not hardcoded.`;
+
+  entries.innerHTML = retrievedContext.map(item => `
+    <div class="rag-entry">
+      <span class="rag-subject">${item.subject}</span>
+      <span class="rag-meta">${item.category} &middot; ${item.assigned_team} &middot; ${item.priority}</span>
+      <span class="rag-score">similarity ${item.similarity_score}</span>
+    </div>
+  `).join("");
+
+  card.style.display = "block";
+}
+
+async function routeTicket() {
+  const subject = document.getElementById("subject-input").value;
+  const description = document.getElementById("description-input").value;
+  const simulateFailure = document.getElementById("simulate-failure-input").checked;
+  const resultPanel = document.getElementById("result-panel");
+  const btn = document.getElementById("route-btn");
+
+  btn.disabled = true;
+  resultPanel.innerHTML = '<p class="placeholder-text">Routing...</p>';
+  renderRetryLog([]);
+  renderRagContext([]);
+  setNodeState("node-retrieval", "running", "Running...");
+  setNodeState("node-triage", "pending", simulateFailure ? "Waiting (will force failures)..." : "Waiting...");
+  setNodeState("node-validation", "pending", "Waiting...");
+  setNodeState("node-review", "pending", "Waiting...");
+
+  try {
+    const data = await routeTicketRequest("482", subject, description, simulateFailure);
+    const r = data.result;
+    const trace = data.trace || [];
+    renderRetryLog(data.retry_log || []);
+    renderRagContext(data.retrieved_context || []);
+
+    // Reveal the real trace, staggered, for a clear presentation flow.
+    const nodeMap = {
+      "RetrievalAgent": "node-retrieval",
+      "TriageAgent": "node-triage",
+      "ValidationAgent": "node-validation",
+      "ReviewAgent": "node-review",
+    };
+    for (const step of trace) {
+      const nodeId = nodeMap[step.agent_name];
+      if (nodeId) {
+        setNodeState(nodeId, step.success ? "done" : "failed", `${step.success ? "Done" : "Failed"} - ${step.duration_ms.toFixed(0)}ms`);
+      }
+      await sleep(300);
+    }
+
+    const [pColor, pBg] = PRIORITY_COLORS[r.priority] || ["#374151", "rgba(55,65,81,0.08)"];
+    const reviewColor = r.needs_human_review ? "#DC2626" : "#059669";
+    const reviewBg = r.needs_human_review ? "rgba(220,38,38,0.10)" : "rgba(5,150,105,0.10)";
+    const reviewText = r.needs_human_review ? "Human review required" : "Auto-approved";
+
+    const sentimentColors = {
+      "Angry": ["#DC2626", "rgba(220,38,38,0.10)"],
+      "Frustrated": ["#EA580C", "rgba(234,88,12,0.10)"],
+      "Neutral": ["#6B7280", "rgba(107,114,128,0.10)"],
+      "Positive": ["#059669", "rgba(5,150,105,0.10)"],
+    };
+    const [sColor, sBg] = sentimentColors[r.sentiment] || sentimentColors["Neutral"];
+
+    lastRoutingResponse = data;
+
+    resultPanel.innerHTML = `
+      <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${r.category}</span>
+      <span class="badge-pill" style="background:${pBg}; color:${pColor};">${r.priority} priority</span>
+      <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${r.assigned_team}</span>
+      <span class="badge-pill" style="background:${sBg}; color:${sColor};">${r.sentiment} tone</span>
+      <span class="badge-pill" style="background:${reviewBg}; color:${reviewColor};">${reviewText}</span>
+      <p style="margin-top:14px; color:#374151; font-size:0.92rem;">${r.reason}</p>
+      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Confidence</div>
+      <div class="confidence-mono">${r.confidence_score}<span style="font-size:1rem; color:#9CA3AF;"> / 100</span></div>
+      <div class="json-box">
+        <div class="json-box-header">
+          <span class="json-box-label">Raw JSON response</span>
+          <button class="copy-btn" id="copy-json-btn" onclick="copyJsonToClipboard()">Copy</button>
+        </div>
+        <pre id="json-output">${JSON.stringify(data, null, 2)}</pre>
+      </div>
+    `;
+  } catch (err) {
+    resultPanel.innerHTML = `<p class="error-text">Request failed: ${err.message}</p>`;
+    resetNodes();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// --- Batch CSV handling (simple parser: no quoted-comma support) ---
+function parseCSV(text) {
+  const lines = text.trim().split("\n").map(l => l.trim()).filter(l => l.length > 0);
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const cells = line.split(",");
+    const row = {};
+    headers.forEach((h, i) => row[h] = (cells[i] || "").trim());
+    return row;
+  });
+  return { headers, rows };
+}
+
+document.getElementById("csv-input").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { headers, rows } = parseCSV(e.target.result);
+    if (!headers.includes("subject") || !headers.includes("description")) {
+      document.getElementById("batch-results").innerHTML = '<p class="error-text">CSV must have subject and description columns.</p>';
+      document.getElementById("batch-btn").disabled = true;
+      return;
+    }
+    parsedRows = rows.map((r, i) => ({ id: r.id || String(i + 1), subject: r.subject, description: r.description }));
+    document.getElementById("batch-results").innerHTML = `<p class="placeholder-text">${parsedRows.length} tickets ready to route.</p>`;
+    document.getElementById("batch-btn").disabled = false;
+  };
+  reader.readAsText(file);
+});
+
+async function routeBatch() {
+  const track = document.getElementById("progress-track");
+  const fill = document.getElementById("progress-fill");
+  const resultsDiv = document.getElementById("batch-results");
+  track.style.display = "block";
+
+  const results = [];
+  for (let i = 0; i < parsedRows.length; i++) {
+    const row = parsedRows[i];
+    fill.style.width = `${((i + 1) / parsedRows.length) * 100}%`;
+    try {
+      const data = await routeTicketRequest(row.id, row.subject, row.description);
+      const aiTimeMs = (data.trace || []).reduce((sum, step) => sum + step.duration_ms, 0);
+      results.push({ ...row, ...data.result, ai_time_ms: aiTimeMs, status: "ok" });
+    } catch (err) {
+      results.push({ ...row, category: "-", priority: "-", assigned_team: "-", confidence_score: "-", needs_human_review: "-", sentiment: "-", ai_time_ms: 0, reason: err.message, status: "failed" });
+    }
+  }
+  track.style.display = "none";
+
+  const flagged = results.filter(r => r.needs_human_review === true).length;
+  const failed = results.filter(r => r.status === "failed").length;
+  const succeeded = results.filter(r => r.status === "ok").length;
+
+  // Manual-routing baseline is a documented estimate, not measured data --
+  // industry guidance generally puts manual ticket triage (read, judge
+  // category/priority, assign) at 2-5 minutes; 3 minutes is used here.
+  const MANUAL_MINUTES_PER_TICKET = 3;
+  const manualTotalMs = succeeded * MANUAL_MINUTES_PER_TICKET * 60 * 1000;
+  const aiTotalMs = results.reduce((sum, r) => sum + (r.ai_time_ms || 0), 0);
+  const speedup = aiTotalMs > 0 ? (manualTotalMs / aiTotalMs).toFixed(0) : "-";
+
+  let rowsHtml = results.map(r => `
+    <tr>
+      <td>${r.id}</td><td>${r.subject}</td><td>${r.category}</td><td>${r.priority}</td>
+      <td>${r.assigned_team}</td><td>${r.sentiment}</td><td>${r.confidence_score}</td><td>${r.needs_human_review}</td><td>${r.status}</td>
+    </tr>
+  `).join("");
+
+  resultsDiv.innerHTML = `
+    <div class="stats-row">
+      <div><div class="stat-number">${results.length}</div><div class="stat-label">Tickets processed</div></div>
+      <div><div class="stat-number">${flagged}</div><div class="stat-label">Flagged for review</div></div>
+      <div><div class="stat-number">${failed}</div><div class="stat-label">Failed requests</div></div>
+    </div>
+    <div class="orchestration-card" style="margin-top:1.2rem; padding:1.2rem 1.4rem;">
+      <div class="orchestration-title" style="font-size:0.92rem;">Manual vs. AI routing time</div>
+      <div class="orchestration-subtitle" style="margin-bottom:0.8rem;">Manual estimate: ${MANUAL_MINUTES_PER_TICKET} min/ticket (documented industry assumption, not measured). AI time: real, measured from this run's trace data.</div>
+      <div class="stats-row">
+        <div><div class="stat-number">${(manualTotalMs / 60000).toFixed(1)} min</div><div class="stat-label">Estimated manual time (${succeeded} tickets)</div></div>
+        <div><div class="stat-number">${(aiTotalMs / 1000).toFixed(1)} sec</div><div class="stat-label">Measured AI time (${succeeded} tickets)</div></div>
+        <div><div class="stat-number">${speedup}x</div><div class="stat-label">Faster than manual (estimated)</div></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Subject</th><th>Category</th><th>Priority</th><th>Team</th><th>Sentiment</th><th>Confidence</th><th>Review?</th><th>Status</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <button class="primary-btn" style="margin-top:12px;" onclick='downloadCSV(${JSON.stringify(results).replace(/'/g, "&#39;")})'>Download results as CSV</button>
+  `;
+}
+
+// --- Past Tickets tab (Gmail-inbox-style list + click-through detail) ---
+async function loadPastTickets() {
+  const listDiv = document.getElementById("past-tickets-list");
+  listDiv.innerHTML = '<p class="placeholder-text">Loading...</p>';
+  try {
+    const response = await fetch("/tickets");
+    if (!response.ok) throw new Error(`${response.status}`);
+    const tickets = await response.json();
+    renderPastTicketsList(tickets);
+  } catch (err) {
+    listDiv.innerHTML = `<p class="error-text">Failed to load past tickets: ${err.message}</p>`;
+  }
+}
+
+function renderPastTicketsList(tickets) {
+  const listDiv = document.getElementById("past-tickets-list");
+  if (tickets.length === 0) {
+    listDiv.innerHTML = '<p class="placeholder-text">No tickets routed yet -- submit one on the Single Ticket tab.</p>';
+    return;
+  }
+
+  listDiv.innerHTML = tickets.map(t => {
+    const [pColor] = PRIORITY_COLORS[t.priority] || ["#9CA3AF"];
+    const date = new Date(t.created_at);
+    const dateStr = date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return `
+      <div class="ticket-row" onclick="showPastTicketDetail('${t.id}')" id="row-${t.id}">
+        <span class="row-priority-dot" style="background:${pColor};"></span>
+        <div class="row-main">
+          <div class="row-subject">${t.subject}</div>
+          <div class="row-meta">${t.category} &middot; ${t.assigned_team} &middot; ${t.sentiment || "Neutral"} tone</div>
+        </div>
+        ${t.needs_human_review ? '<span class="row-review-flag" title="Needs human review">&#9873;</span>' : ""}
+        <span class="row-date">${dateStr}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+async function showPastTicketDetail(ticketId) {
+  document.querySelectorAll(".ticket-row").forEach(r => r.classList.remove("selected"));
+  const row = document.getElementById(`row-${ticketId}`);
+  if (row) row.classList.add("selected");
+
+  const detailDiv = document.getElementById("past-ticket-detail");
+  detailDiv.innerHTML = '<p class="placeholder-text">Loading...</p>';
+
+  try {
+    const response = await fetch(`/tickets/${ticketId}`);
+    if (!response.ok) throw new Error(`${response.status}`);
+    const t = await response.json();
+
+    const [pColor, pBg] = PRIORITY_COLORS[t.priority] || ["#374151", "rgba(55,65,81,0.08)"];
+    const reviewColor = t.needs_human_review ? "#DC2626" : "#059669";
+    const reviewBg = t.needs_human_review ? "rgba(220,38,38,0.10)" : "rgba(5,150,105,0.10)";
+    const reviewText = t.needs_human_review ? "Human review required" : "Auto-approved";
+
+    const traceHtml = (t.trace || []).map(step => `
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
+        <span>${step.agent_name}</span>
+        <span style="color:${step.success ? '#059669' : '#DC2626'}; font-family:'JetBrains Mono',monospace;">${step.success ? "Done" : "Failed"} - ${step.duration_ms.toFixed(0)}ms</span>
+      </div>
+    `).join("");
+
+    detailDiv.innerHTML = `
+      <p style="font-weight:700; font-size:1rem; margin:0 0 10px 0;">${t.subject}</p>
+      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 14px 0;">${t.description}</p>
+      <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${t.category}</span>
+      <span class="badge-pill" style="background:${pBg}; color:${pColor};">${t.priority} priority</span>
+      <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${t.assigned_team}</span>
+      <span class="badge-pill" style="background:${reviewBg}; color:${reviewColor};">${reviewText}</span>
+      <p style="margin-top:12px; color:#374151; font-size:0.88rem;">${t.reason}</p>
+      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Confidence</div>
+      <div class="confidence-mono" style="font-size:1.3rem;">${t.confidence_score}<span style="font-size:0.85rem; color:#9CA3AF;"> / 100</span></div>
+      <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Agent trace</div>
+      ${traceHtml}
+    `;
+  } catch (err) {
+    detailDiv.innerHTML = `<p class="error-text">Failed to load ticket: ${err.message}</p>`;
+  }
+}
+
+function downloadCSV(results) {
+  const headers = ["id","subject","category","priority","assigned_team","sentiment","confidence_score","needs_human_review","ai_time_ms","reason","status"];
+  const csvLines = [headers.join(",")];
+  results.forEach(r => {
+    csvLines.push(headers.map(h => `"${String(r[h]).replace(/"/g, '""')}"`).join(","));
+  });
+  const blob = new Blob([csvLines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "routed_tickets.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
