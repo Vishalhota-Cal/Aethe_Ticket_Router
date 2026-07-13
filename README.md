@@ -1,4 +1,4 @@
-# ◆ Aetherion — AI Smart Ticket Router
+# ◆ AI Smart Ticket Router
 
 **Odyssey 2026 · Port·04 — The Senate of Gods**
 Built by **Vishal Hota**, AI Intern, Calfus
@@ -16,7 +16,7 @@ Built by **Vishal Hota**, AI Intern, Calfus
 
 Every support team has the same 2am problem: a wall of tickets, no consistent way to triage them, and a human somewhere deciding — half by instinct, half by fatigue — what's urgent, who owns it, and how annoyed the customer sounds. That judgment call, repeated hundreds of times a day, is exactly the kind of structured, repeatable decision an AI agent pipeline is good at making faster and more consistently than a tired human at the end of a shift.
 
-Aetherion Ticket Router is that pipeline: **four coordinated AI agents** that take a raw support message and hand back a fully structured decision — category, priority, assigned team, one-line reasoning, a confidence score, and the customer's emotional tone — as clean, validated JSON.
+This AI Smart Ticket Router is that pipeline: **four coordinated AI agents** that take a raw support message and hand back a fully structured decision — category, priority, assigned team, one-line reasoning, a confidence score, and the customer's emotional tone — as clean, validated JSON.
 
 > ### 🤖 The headline feature: this is genuinely agentic, not one prompt wearing a trench coat.
 > Every ticket passes through **four separate agents** — Retrieval, Triage, Validation, Review — each with one job, each independently testable, coordinated by a single orchestrator through a shared context object. Swap any one agent out and the other three don't need to know or care. That's the actual architectural bet this project makes, and everything else (RAG, resilience, self-repair) is built on top of it.
