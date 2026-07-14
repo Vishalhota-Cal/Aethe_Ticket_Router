@@ -6,6 +6,12 @@
 <title>AI Smart Ticket Router</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Chart.js -- used only for the two Admin Analytics visuals (department
+     donut, daily volume line) that genuinely benefit from a real chart.
+     Everything else in Analytics reuses this app's existing hand-rolled
+     bar-list style, so this is the one deliberate exception to the
+     "no external script" pattern the rest of the frontend follows. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -29,12 +35,11 @@
     margin-bottom: 2.4rem;
     width: 100%;
   }
-  .header-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .header-brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .header-logo-icon { display: block; flex-shrink: 0; }
-  .header-logo { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
-  .header-tagline {
-    font-size: 0.78rem; font-weight: 500; color: #9CA3AF; white-space: nowrap;
-    padding-left: 10px; margin-left: 2px; border-left: 1px solid rgba(0,0,0,0.08);
+  .header-logo {
+    font-weight: 700; font-size: 1.05rem; white-space: nowrap;
+    padding-left: 12px; border-left: 1px solid rgba(0,0,0,0.1);
   }
   .header-nav-links { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
   .header-nav-links .nav-tag {
@@ -50,6 +55,67 @@
   .header-cta-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(52,84,244,0.3); }
   .hero-title { font-size: 2.6rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.5rem 0; }
   .hero-subtitle { color: #4B5563; font-size: 1.02rem; max-width: 680px; margin-bottom: 2.2rem; }
+
+  .view-toggle { display: flex; background: #F3F4F6; border-radius: 999px; padding: 3px; gap: 2px; flex-shrink: 0; }
+  .view-toggle-btn {
+    border: none; background: none; padding: 7px 16px; border-radius: 999px; font-size: 0.82rem;
+    font-weight: 600; color: #6B7280; cursor: pointer; font-family: 'Space Grotesk', sans-serif;
+    transition: all 0.15s ease; white-space: nowrap;
+  }
+  .view-toggle-btn.active { background: #fff; color: #111827; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+
+  .status-pill { font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .admin-detail-section { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid rgba(0,0,0,0.06); }
+  .admin-override-note { color: #9CA3AF; font-size: 0.76rem; margin: -6px 0 10px 0; }
+
+  .track-ticket-box { display: flex; gap: 8px; align-items: flex-start; }
+  .track-ticket-box input { margin-bottom: 0; flex: 1; }
+
+  .kanban-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  .kanban-column { background: #FAFAFB; border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 12px; }
+  .kanban-column-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .kanban-column-title { font-weight: 700; font-size: 0.85rem; }
+  .kanban-column-count {
+    background: rgba(0,0,0,0.06); color: #6B7280; font-size: 0.72rem; font-weight: 700;
+    padding: 2px 9px; border-radius: 999px;
+  }
+  .kanban-cards { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; }
+  .kanban-card {
+    background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 10px; padding: 10px 12px;
+    cursor: pointer; transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  }
+  .kanban-card:hover { box-shadow: 0 4px 14px rgba(80,60,140,0.10); transform: translateY(-1px); }
+  .kanban-card.selected { border-color: #6D5BD0; background: #F8F7FE; }
+  .kanban-card-subject {
+    font-weight: 600; font-size: 0.82rem; margin-bottom: 4px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .kanban-card-meta { font-size: 0.72rem; color: #9CA3AF; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .kanban-card-priority-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .department-chip {
+    display: inline-flex; align-items: center; gap: 6px; background: #F3F0FA; color: #6D5BD0;
+    font-size: 0.82rem; font-weight: 600; padding: 6px 14px; border-radius: 999px;
+    margin: 0 8px 8px 0;
+  }
+  .department-chip .dept-count { color: #9CA3AF; font-weight: 500; }
+  .employee-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-radius: 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .employee-row .employee-name { font-weight: 600; font-size: 0.88rem; }
+  .employee-row .employee-meta { color: #9CA3AF; font-size: 0.76rem; margin-top: 2px; }
+  .employee-row .employee-main { flex: 1; min-width: 0; }
+
+  .ticket-id-banner {
+    background: #EFF6FF; border: 1px solid rgba(29,78,216,0.15); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 12px; font-size: 0.85rem; color: #1D4ED8;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .ticket-id-banner code {
+    font-family: 'JetBrains Mono', monospace; font-weight: 700; background: rgba(29,78,216,0.08);
+    padding: 3px 10px; border-radius: 6px;
+  }
 
   /* Orchestration diagram */
   .orchestration-card {
@@ -104,11 +170,45 @@
   }
   .glass-card h3 { margin: 0 0 1rem 0; font-size: 1rem; }
   label { display: block; font-size: 0.82rem; color: #4B5563; margin-bottom: 4px; font-weight: 600; }
-  input[type="text"], textarea, input[type="file"] {
+  input[type="text"], textarea, input[type="file"], select {
     width: 100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 10px 14px;
     font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; margin-bottom: 1rem; background: #fff; color: #111827;
   }
   textarea { resize: vertical; min-height: 100px; }
+
+  .trial-timer {
+    font-family: 'JetBrains Mono', monospace; font-size: 2.4rem; font-weight: 700; color: #DC2626;
+    text-align: center; margin: 0.4rem 0 1.2rem 0;
+  }
+  .trial-progress { color: #6B7280; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .trial-summary-highlight {
+    background: rgba(5,150,105,0.08); border: 1px solid rgba(5,150,105,0.25); border-radius: 12px;
+    padding: 14px 16px; margin-top: 1.1rem; font-size: 0.88rem; color: #065F46; line-height: 1.5;
+  }
+
+  .trial-compare-card {
+    background: #FAFAFB; border: 1px solid rgba(0,0,0,0.06); border-radius: 14px;
+    padding: 1rem 1.2rem; margin-bottom: 1rem;
+  }
+  .trial-compare-header {
+    display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap;
+    gap: 8px; margin-bottom: 0.9rem;
+  }
+  .trial-compare-subject { font-weight: 700; font-size: 0.92rem; }
+  .trial-compare-time { font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; color: #6B7280; white-space: nowrap; }
+  .trial-compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; }
+  .trial-compare-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9CA3AF;
+    font-weight: 700; margin-bottom: 8px;
+  }
+  .trial-compare-confidence { font-size: 0.78rem; color: #6B7280; font-family: 'JetBrains Mono', monospace; margin-top: 8px; }
+  .trial-compare-reason { font-size: 0.82rem; color: #374151; margin: 6px 0 0 0; font-style: italic; }
+  .trial-compare-agreement {
+    margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px solid rgba(0,0,0,0.07);
+    font-size: 0.82rem; font-weight: 600; color: #6B7280;
+  }
+  .trial-compare-agreement.full { color: #059669; }
+  .trial-compare-agreement.partial { color: #DC2626; }
   button.primary-btn {
     background: #3454F4; color: white; border: none; border-radius: 999px; padding: 10px 26px;
     font-weight: 600; font-size: 0.92rem; cursor: pointer; font-family: 'Space Grotesk', sans-serif;
@@ -132,9 +232,41 @@
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,0.06); }
   th { color: #6B7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
 
-  .stats-row { display: flex; gap: 2rem; margin-top: 1.2rem; }
+  .stats-row { display: flex; gap: 2rem; margin-top: 1.2rem; flex-wrap: wrap; }
   .stat-number { font-size: 1.7rem; font-weight: 700; color: #6D5BD0; }
   .stat-label { color: #6B7280; font-size: 0.8rem; }
+
+  .lifetime-stats-card { border: 1px solid rgba(109,91,208,0.18); background: rgba(243,240,250,0.55); }
+  .lifetime-stats-card .stat-number { color: #3454F4; }
+
+  .manual-time-control {
+    display: flex; align-items: center; gap: 10px; margin: 0.2rem 0 1.2rem 0;
+    padding: 10px 14px; background: #FAFAFB; border-radius: 12px; border: 1px solid rgba(0,0,0,0.06);
+    flex-wrap: wrap;
+  }
+  .manual-time-control label { margin: 0; white-space: nowrap; }
+  .manual-time-control input[type="number"] {
+    width: 76px; margin: 0; padding: 6px 10px; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;
+    font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; background: #fff; color: #111827;
+  }
+  .manual-time-control .hint { color: #9CA3AF; font-size: 0.74rem; }
+
+  .bar-chart { margin-top: 1.1rem; }
+  .bar-chart-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-chart-label { width: 130px; font-size: 0.78rem; color: #6B7280; font-weight: 600; flex-shrink: 0; }
+  .bar-track { flex: 1; background: #F3F4F6; border-radius: 999px; height: 14px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+  .bar-fill.bar-manual { background: #CBD5E1; }
+  .bar-fill.bar-ai { background: #3454F4; }
+  .bar-chart-value {
+    width: 90px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+    color: #111827; flex-shrink: 0;
+  }
+
+  .time-savings-note {
+    margin-top: 10px; font-size: 0.8rem; color: #059669; background: rgba(5,150,105,0.08);
+    padding: 6px 12px; border-radius: 8px; display: inline-block;
+  }
 
   .footer-note { color: #9CA3AF; font-size: 0.78rem; margin-top: 2.5rem; letter-spacing: 0.03em; }
 
@@ -225,23 +357,33 @@
 
   <div class="header-pill">
     <div class="header-brand">
-      <svg class="header-logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="2.1" fill="#3454F4"/>
-        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none"/>
-        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none" transform="rotate(60 12 12)"/>
-        <ellipse cx="12" cy="12" rx="9.5" ry="4" stroke="#111827" stroke-width="1.3" fill="none" transform="rotate(120 12 12)"/>
+      <svg class="header-logo-icon" width="104" height="27" viewBox="0 0 378 99" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g clip-path="url(#clip0_calfus_header)">
+          <path d="M68.6401 32.2068C67.9344 29.4803 66.9667 26.9713 65.7355 24.6823C64.5027 22.3953 62.9188 20.4151 60.9839 18.7421C59.0469 17.0719 56.7807 15.7724 54.1855 14.8484C51.5891 13.9245 48.5755 13.4625 45.1437 13.4625C40.1276 13.4625 35.7921 14.4749 32.1417 16.4984C28.4891 18.524 25.5188 21.2303 23.2317 24.6167C20.9421 28.0052 19.2495 31.8557 18.1495 36.1661C17.0479 40.4797 16.5 44.8787 16.5 49.3667C16.5 53.8541 17.0479 58.2568 18.1495 62.5667C19.2495 66.8792 20.9421 70.7307 23.2317 74.1161C25.5188 77.5041 28.4891 80.2099 32.1417 82.2333C35.7921 84.2593 40.1276 85.2697 45.1437 85.2697C48.8396 85.2697 52.0943 84.6344 54.9115 83.3557C57.7271 82.0823 60.1464 80.3193 62.1719 78.0771C64.1953 75.8323 65.7792 73.2151 66.924 70.2229C68.0661 67.2307 68.8151 64.0188 69.1677 60.586H85.2713C84.9193 66.2203 83.7084 71.3661 81.6417 76.0303C79.5729 80.6969 76.7787 84.7229 73.2599 88.1083C69.7391 91.4964 65.6036 94.1136 60.8516 95.9625C56.0995 97.8115 50.8631 98.7333 45.1437 98.7333C38.1021 98.7333 31.7891 97.4339 26.2016 94.8401C20.6125 92.2464 15.8828 88.7021 12.0115 84.2151C8.13855 79.7255 5.16875 74.4912 3.10156 68.5068C1.03333 62.5224 0 56.1448 0 49.3667C0 42.6797 1.03333 36.3437 3.10156 30.3583C5.16875 24.3749 8.13855 19.138 12.0115 14.6505C15.8828 10.1625 20.6125 6.59841 26.2016 3.95828C31.7891 1.31881 38.1021 -0.00159324 45.1437 -0.00159324C50.424 -0.00159324 55.3948 0.724007 60.0599 2.17654C64.7235 3.62867 68.838 5.74068 72.4016 8.51254C75.9656 11.2849 78.8469 14.6505 81.0473 18.6104C83.2459 22.5703 84.612 27.1036 85.1401 32.2068H68.6401Z" fill="#111827"/>
+          <path d="M140.313 62.3022C138.025 63.7995 135.209 64.7022 131.866 65.0094C128.52 65.3183 125.177 65.7803 121.834 66.3948C120.25 66.6579 118.709 67.0328 117.214 67.5172C115.716 68.0016 114.396 68.6604 113.254 69.4964C112.109 70.335 111.208 71.4339 110.547 72.7959C109.888 74.1631 109.558 75.8115 109.558 77.7464C109.558 79.4183 110.04 80.8271 111.01 81.9703C111.977 83.1162 113.143 84.0172 114.508 84.676C115.871 85.3375 117.367 85.7985 118.996 86.0615C120.623 86.3271 122.097 86.4573 123.418 86.4573C125.088 86.4573 126.893 86.2412 128.83 85.7985C130.764 85.3583 132.592 84.611 134.308 83.5536C136.024 82.499 137.453 81.1579 138.597 79.5276C139.74 77.9 140.313 75.8974 140.313 73.5224V62.3022ZM155.361 81.3115C155.361 83.1579 155.603 84.4782 156.088 85.2698C156.571 86.0615 157.517 86.4573 158.925 86.4573C159.365 86.4573 159.893 86.4573 160.509 86.4573C161.124 86.4573 161.831 86.3714 162.621 86.1943V96.6214C162.093 96.7985 161.411 96.9964 160.576 97.2177C159.739 97.4339 158.88 97.6344 158.001 97.8115C157.121 97.986 156.24 98.1188 155.361 98.2073C154.481 98.2933 153.732 98.3375 153.117 98.3375C150.036 98.3375 147.485 97.7229 145.461 96.4912C143.436 95.2594 142.116 93.1031 141.501 90.0224C138.509 92.9261 134.836 95.0381 130.48 96.3584C126.123 97.6787 121.92 98.3375 117.873 98.3375C114.792 98.3375 111.845 97.9209 109.03 97.0849C106.212 96.249 103.727 95.0172 101.571 93.3896C99.4145 91.762 97.6984 89.6917 96.424 87.1839C95.1469 84.676 94.5098 81.7516 94.5098 78.4052C94.5098 74.1812 95.2792 70.7516 96.8197 68.111C98.3588 65.4703 100.384 63.4036 102.892 61.9068C105.399 60.4104 108.214 59.3323 111.34 58.6735C114.462 58.012 117.61 57.5068 120.778 57.1552C123.505 56.6266 126.101 56.2527 128.566 56.0328C131.029 55.814 133.206 55.4391 135.1 54.9104C136.991 54.3818 138.487 53.5694 139.588 52.4678C140.687 51.3688 141.237 49.7188 141.237 47.5188C141.237 45.5839 140.776 43.9995 139.852 42.7667C138.928 41.5355 137.783 40.5886 136.42 39.9287C135.055 39.2688 133.536 38.8292 131.866 38.6083C130.193 38.3896 128.609 38.2782 127.114 38.2782C122.89 38.2782 119.412 39.1588 116.685 40.9183C113.957 42.6798 112.417 45.4068 112.066 49.1027H97.0177C97.2817 44.7031 98.338 41.0506 100.185 38.147C102.034 35.2422 104.387 32.912 107.248 31.1506C110.106 29.3907 113.341 28.1599 116.95 27.4547C120.557 26.7511 124.253 26.3984 128.037 26.3984C131.381 26.3984 134.681 26.7511 137.937 27.4547C141.193 28.1599 144.119 29.3022 146.716 30.8864C149.311 32.4703 151.401 34.5167 152.985 37.0246C154.569 39.5328 155.361 42.5912 155.361 46.1979V81.3115Z" fill="#111827"/>
+          <path d="M171.993 2.24214H187.041V96.4912H171.993V2.24214Z" fill="#111827"/>
+          <path d="M196.677 28.2464H207.899V22.5703C207.899 18.2599 208.427 14.762 209.481 12.0765C210.539 9.39321 211.945 7.32455 213.705 5.87295C215.467 4.42028 217.469 3.45308 219.711 2.96828C221.956 2.48602 224.309 2.24214 226.773 2.24214C231.612 2.24214 235.133 2.55161 237.333 3.16614V14.914C236.364 14.6505 235.331 14.4527 234.232 14.3203C233.131 14.1885 231.833 14.1229 230.339 14.1229C228.312 14.1229 226.576 14.6074 225.125 15.5746C223.672 16.5438 222.945 18.4355 222.945 21.2506V28.2464H235.751V39.4661H222.945V96.4912H207.899V39.4661H196.677V28.2464Z" fill="#111827"/>
+          <path d="M304.917 96.4912H290.133V86.986H289.867C288.021 90.4183 285.268 93.1709 281.617 95.236C277.967 97.3037 274.248 98.3375 270.464 98.3375C261.489 98.3375 254.997 96.1162 250.995 91.6735C246.989 87.2308 244.989 80.5198 244.989 71.5432V28.2464H260.036V70.0902C260.036 76.0771 261.18 80.3011 263.469 82.762C265.755 85.2282 268.967 86.4573 273.104 86.4573C276.273 86.4573 278.912 85.9755 281.024 85.0068C283.136 84.038 284.852 82.7412 286.172 81.1136C287.492 79.486 288.437 77.5276 289.011 75.2386C289.581 72.9522 289.867 70.486 289.867 67.8454V28.2464H304.917V96.4912Z" fill="#111827"/>
+          <path d="M332.107 74.5798C332.547 78.9807 334.219 82.0588 337.123 83.8194C340.027 85.5797 343.503 86.4573 347.552 86.4573C348.959 86.4573 350.565 86.3479 352.369 86.1292C354.172 85.9104 355.867 85.4912 357.451 84.874C359.036 84.2594 360.333 83.3558 361.347 82.1683C362.357 80.9807 362.817 79.4183 362.732 77.4834C362.643 75.5484 361.94 73.9651 360.62 72.7307C359.3 71.499 357.604 70.5094 355.536 69.7594C353.469 69.0146 351.115 68.374 348.476 67.8454C345.836 67.3194 343.151 66.7464 340.424 66.1318C337.607 65.5156 334.901 64.7672 332.305 63.887C329.708 63.0079 327.375 61.8194 325.309 60.3219C323.24 58.8271 321.591 56.9131 320.36 54.5798C319.125 52.249 318.511 49.3667 318.511 45.9344C318.511 42.2386 319.412 39.1364 321.216 36.6287C323.021 34.1208 325.309 32.0974 328.081 30.5563C330.855 29.0178 333.932 27.9391 337.32 27.3224C340.708 26.7079 343.943 26.3984 347.024 26.3984C350.541 26.3984 353.909 26.774 357.123 27.5203C360.333 28.2694 363.237 29.4803 365.833 31.1506C368.427 32.8235 370.585 35.0011 372.303 37.6844C374.019 40.3698 375.093 43.6036 375.536 47.3864H359.828C359.123 43.7792 357.472 41.3594 354.877 40.1266C352.281 38.8954 349.309 38.2782 345.967 38.2782C344.912 38.2782 343.656 38.3678 342.205 38.5427C340.752 38.7198 339.388 39.0495 338.115 39.5328C336.836 40.0172 335.757 40.7203 334.88 41.6448C333.997 42.5688 333.56 43.7792 333.56 45.2746C333.56 47.123 334.195 48.6198 335.473 49.7626C336.748 50.9079 338.421 51.8531 340.489 52.6006C342.555 53.349 344.912 53.986 347.552 54.5146C350.191 55.0432 352.917 55.6162 355.735 56.2307C358.461 56.8479 361.148 57.5954 363.787 58.474C366.427 59.3558 368.781 60.5432 370.849 62.038C372.917 63.5355 374.588 65.4271 375.864 67.7151C377.14 70.0042 377.779 72.8194 377.779 76.1631C377.779 80.2099 376.855 83.6422 375.008 86.4573C373.159 89.275 370.76 91.5641 367.812 93.3219C364.864 95.0849 361.585 96.3584 357.979 97.15C354.369 97.9417 350.805 98.3375 347.287 98.3375C342.973 98.3375 338.992 97.8531 335.341 96.887C331.688 95.9183 328.521 94.4443 325.839 92.4651C323.151 90.4834 321.039 88.0224 319.5 85.0719C317.961 82.124 317.145 78.6266 317.06 74.5798H332.107Z" fill="#111827"/>
+          <path d="M88.3104 29.085C88.3104 34.8448 83.6412 39.514 77.8812 39.514C72.1208 39.514 67.4516 34.8448 67.4516 29.085C67.4516 23.3246 72.1208 18.6552 77.8812 18.6552C83.6412 18.6552 88.3104 23.3246 88.3104 29.085Z" fill="#52C4A7"/>
+        </g>
+        <defs><clipPath id="clip0_calfus_header"><rect width="377.773" height="98.7333" fill="white"/></clipPath></defs>
       </svg>
-      <span class="header-logo">Aetherion</span>
-      <span class="header-tagline">Ticket Router</span>
+      <span class="header-logo">AI Smart Ticket Router</span>
     </div>
     <div class="header-nav-links">
       <span class="nav-tag">Multi-Agent</span>
       <span class="nav-tag">OpenAI-Backed</span>
       <span class="nav-tag">Self-Repairing</span>
     </div>
+    <div class="view-toggle">
+      <button class="view-toggle-btn active" id="view-btn-customer" onclick="switchView('customer')">Customer View</button>
+      <button class="view-toggle-btn" id="view-btn-admin" onclick="switchView('admin')">Admin View</button>
+    </div>
     <button class="header-cta-btn" onclick="document.getElementById('tab-single').scrollIntoView({behavior:'smooth', block:'start'})">Try it live</button>
   </div>
 
+  <div id="view-customer">
   <div class="hero-title">Intent is the ticket.<br/>Agents are the response.</div>
   <div class="hero-subtitle">
     Every ticket is classified, prioritized, validated, and reviewed by a coordinated
@@ -290,6 +432,13 @@
     </div>
   </div>
 
+  <!-- LIFETIME IMPACT -- always visible on Home, backs the M4S7 manual-vs-AI time evidence -->
+  <div class="orchestration-card lifetime-stats-card" id="lifetime-stats-card">
+    <div class="orchestration-title" style="font-size:0.92rem;">Lifetime Impact -- Since This System Went Live</div>
+    <div class="orchestration-subtitle lifetime-stats-subtitle">Loading lifetime stats...</div>
+    <div class="stats-row lifetime-stats-row"></div>
+  </div>
+
   <!-- LIVE RETRY / ANOMALY LOG (hidden until a request actually logs something) -->
   <div class="orchestration-card retry-log-card" id="retry-log-card" style="display:none;">
     <div class="orchestration-title" style="font-size:0.92rem;">Live Retry &amp; Anomaly Log</div>
@@ -308,6 +457,7 @@
     <button class="tab-btn active" onclick="switchTab('single')">Single Ticket</button>
     <button class="tab-btn" onclick="switchTab('batch')">Batch Upload (CSV)</button>
     <button class="tab-btn" onclick="switchTab('past')">Past Tickets</button>
+    <button class="tab-btn" onclick="switchTab('manual-trial')">Manual Timing Trial</button>
   </div>
 
   <!-- SINGLE TICKET TAB -->
@@ -316,13 +466,16 @@
       <div class="glass-card">
         <h3>Submit a ticket</h3>
         <label>Subject</label>
-        <input type="text" id="subject-input" value="Can't log in - urgent, demo in 30 minutes" />
+        <input type="text" id="subject-input" maxlength="300" value="Can't log in - urgent, demo in 30 minutes" />
         <label>Description</label>
-        <textarea id="description-input">I've been locked out of my account for the last 2 hours. I have a client demo in 30 minutes and really need this fixed immediately.</textarea>
+        <textarea id="description-input" maxlength="5000">I've been locked out of my account for the last 2 hours. I have a client demo in 30 minutes and really need this fixed immediately.</textarea>
         <label class="simulate-toggle" for="simulate-failure-input">
           <input type="checkbox" id="simulate-failure-input" />
           Simulate a transient AI failure (proves the retry/backoff logic live)
         </label>
+        <label>Attachment (optional)</label>
+        <input type="file" id="attachment-input" accept="image/*,video/*,.pdf,.doc,.docx,.txt" onchange="document.getElementById('attachment-status').textContent = this.files.length ? `${this.files[0].name} (${(this.files[0].size / 1024).toFixed(0)}KB)` : '';" />
+        <div id="attachment-status" class="placeholder-text" style="margin:4px 0 10px;"></div>
         <button class="primary-btn" id="route-btn" onclick="routeTicket()">Route ticket</button>
       </div>
       <div class="glass-card">
@@ -337,6 +490,12 @@
     <div class="glass-card">
       <h3>Upload a CSV of tickets</h3>
       <p class="placeholder-text">Expected columns: <code>id</code> (optional), <code>subject</code>, <code>description</code>. Simple CSV only (no commas inside quoted fields).</p>
+      <div class="manual-time-control">
+        <label for="manual-minutes-input" style="margin:0;">Manual triage assumption:</label>
+        <input type="number" id="manual-minutes-input" min="0.5" max="30" step="0.5" value="3" onchange="saveManualMinutes()" />
+        <span>min/ticket</span>
+        <span class="hint">Editable -- your own estimate, saved on this device, used in every comparison below.</span>
+      </div>
       <input type="file" id="csv-input" accept=".csv" />
       <button class="primary-btn" id="batch-btn" onclick="routeBatch()" disabled>Route all tickets</button>
       <div class="progress-track" id="progress-track" style="display:none;">
@@ -348,17 +507,215 @@
 
   <!-- PAST TICKETS TAB -->
   <div id="tab-past" class="tab-panel">
-    <div class="grid-2">
-      <div class="glass-card">
+    <div class="glass-card" style="margin-bottom:1.6rem;">
+      <h3>Track my ticket</h3>
+      <p class="placeholder-text" style="margin-bottom:0.8rem;">Got a ticket ID from the Single Ticket tab? Enter it here to check its status any time.</p>
+      <div class="track-ticket-box">
+        <input type="text" id="track-ticket-input" placeholder="Paste your ticket ID..." />
+        <button class="primary-btn" onclick="trackTicketById()">Track</button>
+      </div>
+    </div>
+    <div class="glass-card" style="margin-bottom:1.6rem;">
+      <div class="card-header-row">
+        <h3>Ticket Board</h3>
+        <button class="refresh-btn" onclick="loadPastTickets()">Refresh</button>
+      </div>
+      <p class="placeholder-text" style="margin-bottom:0.4rem;">Grouped by status, like a Jira board -- New, In Progress, Resolved, Closed. There's no login in this demo, so this shows every ticket in the system by default.</p>
+      <label class="simulate-toggle" for="my-tickets-only-toggle" style="margin-bottom:0.8rem;">
+        <input type="checkbox" id="my-tickets-only-toggle" onchange="loadPastTickets()" />
+        Only show tickets I submitted from this browser
+      </label>
+      <div class="kanban-board" id="past-kanban-board"><p class="placeholder-text">Loading...</p></div>
+    </div>
+    <div class="glass-card">
+      <h3>Ticket detail</h3>
+      <div id="past-ticket-detail"><p class="placeholder-text">Select a ticket card above, or track one by ID above the board.</p></div>
+    </div>
+  </div>
+
+  <!-- MANUAL TIMING TRIAL TAB -- real, self-timed manual baseline, not an assumption -->
+  <div id="tab-manual-trial" class="tab-panel">
+    <div class="glass-card" id="trial-intro-card">
+      <h3>Manual Timing Trial -- the real baseline</h3>
+      <p class="placeholder-text" style="margin-bottom:1rem;">
+        Every other number on this page uses an editable manual-time <em>assumption</em>. This tab
+        replaces the assumption with real, measured data: you read each ticket and decide its
+        category, priority, and team the way a human agent would, and the browser times you with
+        <code>performance.now()</code> -- an actual stopwatch, not a guess. The moment you submit,
+        the same ticket is routed through the real AI pipeline, so you get a true side-by-side
+        where both numbers are measured, not one measured and one assumed.
+      </p>
+      <p class="placeholder-text" style="margin-bottom:1rem;">Uses the 20 sample tickets by default, or your uploaded CSV from the Batch tab if one is loaded there first.</p>
+      <button class="primary-btn" onclick="startManualTrial()">Start timed trial</button>
+      <div id="trial-source-note" class="placeholder-text" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="glass-card" id="trial-active-card" style="display:none; margin-top:1.4rem;">
+      <div class="trial-progress" id="trial-progress-text"></div>
+      <h3 id="trial-ticket-subject" style="margin-bottom:6px;"></h3>
+      <p style="color:#4B5563; font-size:0.9rem; margin-bottom:0;" id="trial-ticket-description"></p>
+      <div class="trial-timer" id="trial-timer-display">0.0s</div>
+      <label>Your category decision</label>
+      <select id="trial-category-input">
+        <option value="">Select...</option>
+        <option>Technical</option><option>Billing</option><option>Account</option><option>Security</option><option>General</option>
+      </select>
+      <label>Your priority decision</label>
+      <select id="trial-priority-input">
+        <option value="">Select...</option>
+        <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+      </select>
+      <label>Your team decision</label>
+      <select id="trial-team-input">
+        <option value="">Select...</option>
+        <option>IT Support</option><option>Billing Team</option><option>Security Team</option><option>Account Management</option><option>General Support</option>
+      </select>
+      <label>Your sentiment/tone read</label>
+      <select id="trial-sentiment-input">
+        <option value="">Select...</option>
+        <option>Angry</option><option>Frustrated</option><option>Neutral</option><option>Positive</option>
+      </select>
+      <label>Does this need human review or escalation?</label>
+      <select id="trial-review-input">
+        <option value="">Select...</option>
+        <option value="true">Yes -- flag for review</option>
+        <option value="false">No -- auto-approve</option>
+      </select>
+      <label>Your confidence in this call (0-100)</label>
+      <input type="text" id="trial-confidence-input" placeholder="e.g. 80" />
+      <label>Your one-line reasoning (matches the AI's "reason" field)</label>
+      <input type="text" id="trial-reason-input" placeholder="Why did you make this call?" />
+      <button class="primary-btn" onclick="submitManualDecision()">Submit my decision</button>
+      <button class="refresh-btn" style="margin-left:10px;" onclick="finishTrial()">Stop trial early &amp; see results</button>
+    </div>
+
+    <div class="glass-card" id="trial-results-card" style="display:none; margin-top:1.4rem;">
+      <h3>Timed trial results -- every field, both sides measured</h3>
+      <div class="stats-row" id="trial-summary-stats"></div>
+      <div class="trial-summary-highlight" id="trial-summary-highlight"></div>
+      <div id="trial-results-body" style="margin-top:1.2rem;"></div>
+    </div>
+  </div>
+
+  </div><!-- /view-customer -->
+
+  <!-- ADMIN VIEW -- ticket queue + lifecycle/override management, no login (demo-scope toggle) -->
+  <div id="view-admin" style="display:none;">
+    <div class="hero-title" style="font-size:1.9rem;">Admin Console</div>
+    <div class="hero-subtitle">
+      Every ticket this system has ever routed. Move a ticket through its lifecycle, leave a
+      resolution note, correct the AI's category/priority/team if it got something wrong, and
+      assign it to a real person from the Team Directory -- none of this touches the AI's own
+      original decision, it's stored alongside it.
+    </div>
+
+    <!-- LIFETIME IMPACT -- also shown here (in addition to Home) since it's
+         the core M4S7 manual-vs-AI evidence and an admin/ops metric too. -->
+    <div class="orchestration-card lifetime-stats-card">
+      <div class="orchestration-title" style="font-size:0.92rem;">Lifetime Impact -- Since This System Went Live</div>
+      <div class="orchestration-subtitle lifetime-stats-subtitle">Loading lifetime stats...</div>
+      <div class="stats-row lifetime-stats-row"></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchAdminTab('queue')">Ticket Queue</button>
+      <button class="tab-btn" onclick="switchAdminTab('directory')">Team Directory</button>
+      <button class="tab-btn" onclick="switchAdminTab('analytics')">Analytics</button>
+    </div>
+
+    <div id="admin-tab-queue" class="tab-panel active">
+      <div class="glass-card" style="margin-bottom:1.6rem;">
         <div class="card-header-row">
-          <h3>Past Tickets</h3>
-          <button class="refresh-btn" onclick="loadPastTickets()">Refresh</button>
+          <h3>Ticket Board</h3>
+          <button class="refresh-btn" onclick="loadAdminQueue()">Refresh</button>
         </div>
-        <div id="past-tickets-list" class="ticket-list-scroll"><p class="placeholder-text">Loading...</p></div>
+        <p class="placeholder-text" style="margin-bottom:0.6rem;">Grouped by status, like a Jira board -- New, In Progress, Resolved, Closed. Sorted by priority within each column.</p>
+        <div class="kanban-board" id="admin-kanban-board"><p class="placeholder-text">Loading...</p></div>
       </div>
       <div class="glass-card">
-        <h3>Ticket detail</h3>
-        <div id="past-ticket-detail"><p class="placeholder-text">Select a ticket from the list to see its full detail and agent trace.</p></div>
+        <h3>Manage ticket</h3>
+        <div id="admin-ticket-detail"><p class="placeholder-text">Select a ticket card above to manage it.</p></div>
+      </div>
+    </div>
+
+    <div id="admin-tab-directory" class="tab-panel">
+      <div class="grid-2">
+        <div class="glass-card">
+          <div class="card-header-row">
+            <h3>Departments</h3>
+            <button class="refresh-btn" onclick="loadDirectory()">Refresh</button>
+          </div>
+          <div id="department-list"></div>
+          <div class="admin-detail-section">
+            <label>New department name</label>
+            <input type="text" id="new-department-name" placeholder="e.g. Legal" />
+            <button class="primary-btn" onclick="createDepartment()">Add department</button>
+            <div id="department-save-status" class="placeholder-text" style="margin-top:8px;"></div>
+          </div>
+        </div>
+        <div class="glass-card">
+          <h3>Employees</h3>
+          <div id="employee-list" class="ticket-list-scroll"></div>
+          <div class="admin-detail-section">
+            <label>Name</label>
+            <input type="text" id="new-employee-name" placeholder="e.g. Priya Nair" />
+            <label>Email (optional)</label>
+            <input type="text" id="new-employee-email" placeholder="e.g. priya.nair@company.com" />
+            <label>Department</label>
+            <select id="new-employee-department"></select>
+            <label>Role / title (optional)</label>
+            <input type="text" id="new-employee-role" placeholder="e.g. Support Engineer" />
+            <button class="primary-btn" onclick="createEmployee()">Add employee</button>
+            <div id="employee-save-status" class="placeholder-text" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin-tab-analytics" class="tab-panel">
+      <div class="glass-card" style="margin-bottom:1.6rem;">
+        <div class="card-header-row">
+          <h3>Analytics</h3>
+          <button class="refresh-btn" onclick="loadAnalytics()">Refresh</button>
+        </div>
+        <p class="placeholder-text" style="margin-bottom:0.8rem;">Business-facing aggregates across every ticket ever routed -- descriptive only, not an SLA/aging system.</p>
+        <div class="stats-row" id="analytics-summary-cards"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="glass-card">
+          <h3>Tickets by department</h3>
+          <p class="placeholder-text" style="margin-bottom:0.6rem;">Which real-world department the AI's routing decisions are landing in.</p>
+          <canvas id="analytics-department-chart" height="220"></canvas>
+        </div>
+        <div class="glass-card">
+          <h3>Daily ticket volume</h3>
+          <p class="placeholder-text" style="margin-bottom:0.6rem;">Tickets routed per day, most recent 30 days with activity.</p>
+          <canvas id="analytics-volume-chart" height="220"></canvas>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:1.6rem;">
+        <div class="glass-card">
+          <h3>Category breakdown</h3>
+          <div id="analytics-category-bars"></div>
+        </div>
+        <div class="glass-card">
+          <h3>Priority breakdown</h3>
+          <div id="analytics-priority-bars"></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:1.6rem;">
+        <div class="glass-card">
+          <h3>Customer sentiment</h3>
+          <div id="analytics-sentiment-bars"></div>
+        </div>
+        <div class="glass-card">
+          <h3>Employee workload</h3>
+          <p class="placeholder-text" style="margin-bottom:0.6rem;">Open tickets (New + In Progress) currently assigned per employee -- proves auto-assignment is actually balancing load, not always picking the same person.</p>
+          <div id="analytics-employee-bars"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -373,8 +730,818 @@ const PRIORITY_COLORS = {
   "Low": ["#059669", "rgba(5,150,105,0.10)"],
 };
 
+const STATUS_COLORS = {
+  "New": ["#1D4ED8", "rgba(29,78,216,0.10)"],
+  "In Progress": ["#CA8A04", "rgba(202,138,4,0.10)"],
+  "Resolved": ["#059669", "rgba(5,150,105,0.10)"],
+  "Closed": ["#6B7280", "rgba(107,114,128,0.10)"],
+};
+
+// --- Customer / Admin view toggle -- no login, just a UI switch. ---
+function switchView(view) {
+  document.getElementById("view-btn-customer").classList.toggle("active", view === "customer");
+  document.getElementById("view-btn-admin").classList.toggle("active", view === "admin");
+  document.getElementById("view-customer").style.display = view === "customer" ? "block" : "none";
+  document.getElementById("view-admin").style.display = view === "admin" ? "block" : "none";
+  if (view === "admin") {
+    loadAdminQueue();
+    loadDirectory();
+    loadLifetimeStats();
+  }
+}
+
+// Admin View has its own sub-tabs (Ticket Queue / Team Directory), scoped
+// to #view-admin so this doesn't clash with the customer-side switchTab().
+function switchAdminTab(name) {
+  const root = document.getElementById("view-admin");
+  root.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  root.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  root.querySelector(`.tab-btn[onclick="switchAdminTab('${name}')"]`).classList.add("active");
+  document.getElementById(`admin-tab-${name}`).classList.add("active");
+  if (name === "directory") loadDirectory();
+  if (name === "analytics") loadAnalytics();
+}
+
+// --- Admin Analytics: business-facing aggregates across every routed
+// ticket -- department/category/priority volume, AI trustworthiness
+// (confidence, review rate, admin-override rate), employee workload
+// balance, sentiment mix, daily volume, and average resolution time.
+// Department and daily-volume render as real Chart.js charts; every
+// other panel reuses this app's existing hand-rolled bar-list style
+// (the same .bar-chart/.bar-track/.bar-fill classes the Manual vs AI
+// time comparison already uses) so Chart.js stays a single, deliberate
+// exception rather than a house style change. If the CDN script fails
+// to load for any reason, the two charts just don't render -- every
+// other panel here has no dependency on Chart.js and still works. ---
+let departmentChartInstance = null;
+let volumeChartInstance = null;
+
+const ANALYTICS_PALETTE = ["#3454F4", "#6D5BD0", "#059669", "#EA580C", "#DC2626", "#CA8A04", "#0EA5E9", "#DB2777"];
+
+function renderBarList(containerId, countsObj, emptyMessage) {
+  const container = document.getElementById(containerId);
+  const entries = Object.entries(countsObj || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    container.innerHTML = `<p class="placeholder-text">${emptyMessage}</p>`;
+    return;
+  }
+  const max = Math.max(...entries.map(([, count]) => count));
+  container.innerHTML = `
+    <div class="bar-chart">
+      ${entries.map(([label, count], i) => `
+        <div class="bar-chart-row">
+          <div class="bar-chart-label">${label}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(count / max) * 100}%; background:${ANALYTICS_PALETTE[i % ANALYTICS_PALETTE.length]};"></div></div>
+          <div class="bar-chart-value">${count}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderEmployeeWorkloadBars(workload) {
+  const container = document.getElementById("analytics-employee-bars");
+  if (!workload || workload.length === 0) {
+    container.innerHTML = '<p class="placeholder-text">No tickets assigned to anyone yet.</p>';
+    return;
+  }
+  const max = Math.max(...workload.map(e => e.open_count), 1);
+  container.innerHTML = `
+    <div class="bar-chart">
+      ${workload.map((e, i) => `
+        <div class="bar-chart-row">
+          <div class="bar-chart-label">${e.employee_name} (${e.department_name})</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(e.open_count / max) * 100}%; background:${ANALYTICS_PALETTE[i % ANALYTICS_PALETTE.length]};"></div></div>
+          <div class="bar-chart-value">${e.open_count} open / ${e.total_count} total</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderDepartmentChart(departmentCounts) {
+  const canvas = document.getElementById("analytics-department-chart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const labels = Object.keys(departmentCounts || {});
+  const values = Object.values(departmentCounts || {});
+
+  if (departmentChartInstance) departmentChartInstance.destroy();
+  departmentChartInstance = new Chart(canvas, {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: labels.map((_, i) => ANALYTICS_PALETTE[i % ANALYTICS_PALETTE.length]) }],
+    },
+    options: {
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+      maintainAspectRatio: true,
+    },
+  });
+}
+
+function renderVolumeChart(dailyVolume) {
+  const canvas = document.getElementById("analytics-volume-chart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const labels = (dailyVolume || []).map(d => d.date);
+  const values = (dailyVolume || []).map(d => d.count);
+
+  if (volumeChartInstance) volumeChartInstance.destroy();
+  volumeChartInstance = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Tickets routed",
+        data: values,
+        borderColor: "#3454F4",
+        backgroundColor: "rgba(52,84,244,0.10)",
+        fill: true,
+        tension: 0.25,
+      }],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      maintainAspectRatio: true,
+    },
+  });
+}
+
+async function loadAnalytics() {
+  const cardsEl = document.getElementById("analytics-summary-cards");
+  try {
+    const response = await fetch("/stats/analytics");
+    if (!response.ok) throw new Error(`${response.status}`);
+    const data = await response.json();
+
+    if (data.total_tickets === 0) {
+      cardsEl.innerHTML = '<p class="placeholder-text">No tickets routed yet -- analytics will populate as tickets come in.</p>';
+      ["analytics-category-bars", "analytics-priority-bars", "analytics-sentiment-bars", "analytics-employee-bars"].forEach(id => {
+        document.getElementById(id).innerHTML = '<p class="placeholder-text">Nothing to show yet.</p>';
+      });
+      return;
+    }
+
+    cardsEl.innerHTML = `
+      <div><div class="stat-number">${data.total_tickets}</div><div class="stat-label">Total tickets routed</div></div>
+      <div><div class="stat-number">${data.avg_confidence_score}</div><div class="stat-label">Avg AI confidence</div></div>
+      <div><div class="stat-number">${data.pct_needs_human_review}%</div><div class="stat-label">Flagged for human review</div></div>
+      <div><div class="stat-number">${data.pct_admin_override}%</div><div class="stat-label">Admin corrected the AI</div></div>
+      <div><div class="stat-number">${data.avg_resolution_hours !== null ? data.avg_resolution_hours + "h" : "--"}</div><div class="stat-label">Avg time to Resolved/Closed${data.resolved_sample_size ? ` (n=${data.resolved_sample_size})` : ""}</div></div>
+    `;
+
+    renderBarList("analytics-category-bars", data.category_counts, "No tickets yet.");
+    renderBarList("analytics-priority-bars", data.priority_counts, "No tickets yet.");
+    renderBarList("analytics-sentiment-bars", data.sentiment_counts, "No tickets yet.");
+    renderEmployeeWorkloadBars(data.employee_workload);
+
+    renderDepartmentChart(data.department_counts);
+    renderVolumeChart(data.daily_volume);
+  } catch (err) {
+    cardsEl.innerHTML = `<p class="error-text">Failed to load analytics: ${err.message}</p>`;
+  }
+}
+
+// --- Team Directory: departments + employees, cached client-side so the
+// ticket-assignment dropdown doesn't need a fresh fetch every time. ---
+let cachedDepartments = [];
+let cachedEmployees = [];
+
+async function loadDirectory() {
+  try {
+    const [deptResponse, empResponse] = await Promise.all([fetch("/departments"), fetch("/employees")]);
+    if (!deptResponse.ok || !empResponse.ok) throw new Error("failed to load directory");
+    cachedDepartments = await deptResponse.json();
+    cachedEmployees = await empResponse.json();
+    renderDepartmentList();
+    renderEmployeeList();
+    populateEmployeeDepartmentSelect();
+  } catch (err) {
+    const deptDiv = document.getElementById("department-list");
+    if (deptDiv) deptDiv.innerHTML = `<p class="error-text">Failed to load directory: ${err.message}</p>`;
+  }
+}
+
+function renderDepartmentList() {
+  const deptDiv = document.getElementById("department-list");
+  if (!deptDiv) return;
+  if (cachedDepartments.length === 0) {
+    deptDiv.innerHTML = '<p class="placeholder-text">No departments yet -- add one below.</p>';
+    return;
+  }
+  deptDiv.innerHTML = cachedDepartments.map(d => {
+    const count = cachedEmployees.filter(e => e.department_id === d.id).length;
+    return `<span class="department-chip">${d.name} <span class="dept-count">${count}</span></span>`;
+  }).join("");
+}
+
+function renderEmployeeList() {
+  const empDiv = document.getElementById("employee-list");
+  if (!empDiv) return;
+  if (cachedEmployees.length === 0) {
+    empDiv.innerHTML = '<p class="placeholder-text">No employees yet -- add one below.</p>';
+    return;
+  }
+  empDiv.innerHTML = cachedEmployees.map(e => `
+    <div class="employee-row">
+      <div class="employee-main">
+        <div class="employee-name">${e.name}</div>
+        <div class="employee-meta">${e.department_name}${e.role ? " &middot; " + e.role : ""}${e.email ? " &middot; " + e.email : ""}</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function populateEmployeeDepartmentSelect() {
+  const select = document.getElementById("new-employee-department");
+  if (!select) return;
+  select.innerHTML = cachedDepartments.map(d => `<option value="${d.id}">${d.name}</option>`).join("");
+}
+
+async function createDepartment() {
+  const nameInput = document.getElementById("new-department-name");
+  const statusEl = document.getElementById("department-save-status");
+  const name = nameInput.value.trim();
+  if (!name) return;
+
+  statusEl.textContent = "Saving...";
+  try {
+    const response = await fetch("/departments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${response.status} - ${text}`);
+    }
+    nameInput.value = "";
+    statusEl.textContent = "Added.";
+    loadDirectory();
+  } catch (err) {
+    statusEl.innerHTML = `<span class="error-text">Failed to add department: ${err.message}</span>`;
+  }
+}
+
+async function createEmployee() {
+  const nameInput = document.getElementById("new-employee-name");
+  const emailInput = document.getElementById("new-employee-email");
+  const departmentSelect = document.getElementById("new-employee-department");
+  const roleInput = document.getElementById("new-employee-role");
+  const statusEl = document.getElementById("employee-save-status");
+
+  const name = nameInput.value.trim();
+  const departmentId = parseInt(departmentSelect.value, 10);
+  if (!name || !Number.isFinite(departmentId)) {
+    statusEl.innerHTML = '<span class="error-text">Name and department are required.</span>';
+    return;
+  }
+
+  statusEl.textContent = "Saving...";
+  try {
+    const response = await fetch("/employees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        department_id: departmentId,
+        email: emailInput.value.trim() || null,
+        role: roleInput.value.trim() || null,
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${response.status} - ${text}`);
+    }
+    nameInput.value = "";
+    emailInput.value = "";
+    roleInput.value = "";
+    statusEl.textContent = "Added.";
+    loadDirectory();
+  } catch (err) {
+    statusEl.innerHTML = `<span class="error-text">Failed to add employee: ${err.message}</span>`;
+  }
+}
+
+// Builds <optgroup>-per-department <option> markup for the ticket
+// assignment dropdown, so employees are easy to find by department.
+function buildEmployeeOptions(selectedEmployeeId) {
+  if (cachedEmployees.length === 0) {
+    return '<option value="">No employees yet -- add one on the Team Directory tab</option>';
+  }
+  const groups = cachedDepartments.map(d => {
+    const employeesInDept = cachedEmployees.filter(e => e.department_id === d.id);
+    if (employeesInDept.length === 0) return "";
+    const options = employeesInDept.map(e =>
+      `<option value="${e.id}" ${String(e.id) === String(selectedEmployeeId) ? "selected" : ""}>${e.name}${e.role ? " (" + e.role + ")" : ""}</option>`
+    ).join("");
+    return `<optgroup label="${d.name}">${options}</optgroup>`;
+  }).join("");
+  return `<option value="">Unassigned</option>${groups}`;
+}
+
+// --- Admin Console: queue + per-ticket management (status, resolution
+// comment, and optional override of the AI's category/priority/team). ---
+// --- Jira-style board: every ticket, grouped into New / In Progress /
+// Resolved / Closed columns. Shared between the Admin Console (editable,
+// clicks into the management panel) and the customer's Past Tickets tab
+// (read-only, clicks into the same detail panel as before). Distinct
+// idPrefix per view since both #view-customer and #view-admin exist in
+// the DOM at once (just one hidden) -- reusing plain ticket ids would
+// collide across the two boards. ---
+const BOARD_COLUMNS = ["New", "In Progress", "Resolved", "Closed"];
+
+function buildKanbanBoardHtml(tickets, cardOnClickFn, idPrefix) {
+  return BOARD_COLUMNS.map(colStatus => {
+    const colTickets = tickets.filter(t => (t.status || "New") === colStatus);
+    const [sColor] = STATUS_COLORS[colStatus] || STATUS_COLORS["New"];
+    const cardsHtml = colTickets.length === 0
+      ? '<p class="placeholder-text" style="font-size:0.78rem; margin:0;">No tickets.</p>'
+      : colTickets.map(t => {
+          const [pColor] = PRIORITY_COLORS[t.priority] || ["#9CA3AF"];
+          const assignedText = t.assigned_employee_name || "Unassigned";
+          return `
+            <div class="kanban-card" onclick="${cardOnClickFn}('${t.id}')" id="${idPrefix}-${t.id}">
+              <div class="kanban-card-subject">${t.attachment_filename ? "&#128206; " : ""}${t.subject}</div>
+              <div class="kanban-card-meta">
+                <span class="kanban-card-priority-dot" style="background:${pColor};"></span>
+                ${t.priority} &middot; Queue: ${t.assigned_team} &middot; ${t.assigned_employee_name ? "Assigned: " : ""}${assignedText}
+              </div>
+            </div>
+          `;
+        }).join("");
+    return `
+      <div class="kanban-column">
+        <div class="kanban-column-header">
+          <span class="kanban-column-title" style="color:${sColor};">${colStatus}</span>
+          <span class="kanban-column-count">${colTickets.length}</span>
+        </div>
+        <div class="kanban-cards">${cardsHtml}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function loadAdminQueue() {
+  const board = document.getElementById("admin-kanban-board");
+  board.innerHTML = '<p class="placeholder-text">Loading...</p>';
+  try {
+    const response = await fetch("/tickets");
+    if (!response.ok) throw new Error(`${response.status}`);
+    const tickets = await response.json();
+    board.innerHTML = buildKanbanBoardHtml(tickets, "showAdminTicketDetail", "admin-card");
+  } catch (err) {
+    board.innerHTML = `<p class="error-text">Failed to load ticket queue: ${err.message}</p>`;
+  }
+}
+
+async function showAdminTicketDetail(ticketId) {
+  document.querySelectorAll("#admin-kanban-board .kanban-card").forEach(r => r.classList.remove("selected"));
+  const card = document.getElementById(`admin-card-${ticketId}`);
+  if (card) card.classList.add("selected");
+
+  const detailDiv = document.getElementById("admin-ticket-detail");
+  detailDiv.innerHTML = '<p class="placeholder-text">Loading...</p>';
+
+  // The employee-assignment dropdown needs the directory loaded first --
+  // guard against the rare race where this fires before loadDirectory()
+  // (kicked off in parallel by switchView) has finished.
+  if (cachedDepartments.length === 0) await loadDirectory();
+
+  try {
+    const response = await fetch(`/tickets/${ticketId}`);
+    if (!response.ok) throw new Error(`${response.status}`);
+    const t = await response.json();
+
+    const [pColor, pBg] = PRIORITY_COLORS[t.priority] || ["#374151", "rgba(55,65,81,0.08)"];
+    const submittedStr = new Date(t.created_at).toLocaleString();
+
+    detailDiv.innerHTML = `
+      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${t.subject}</p>
+      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 12px 0;">${t.description}</p>
+      <div class="placeholder-text" style="margin-bottom:10px;">Submitted ${submittedStr} &middot; ticket ID <code>${t.id}</code></div>
+      ${t.attachment_filename ? `<div style="margin-bottom:10px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${t.attachment_filename})</a></div>` : ""}
+
+      <div class="admin-detail-section" style="margin-top:0; padding-top:0; border-top:none;">
+        <div class="trial-compare-label">AI's original decision</div>
+        <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${t.category}</span>
+        <span class="badge-pill" style="background:${pBg}; color:${pColor};">${t.priority} priority</span>
+        <span class="placeholder-text" style="font-size:0.72rem; margin-right:2px;">Queue:</span>
+        <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${t.assigned_team}</span>
+        <span class="badge-pill" style="background:#FEF3C7; color:#92400E;">${t.sentiment} tone</span>
+        <p style="margin-top:8px; color:#374151; font-size:0.86rem;">"${t.reason}"</p>
+        <div class="confidence-mono" style="font-size:1.1rem;">${t.confidence_score}<span style="font-size:0.8rem; color:#9CA3AF;"> / 100 AI confidence</span></div>
+      </div>
+
+      <div class="admin-detail-section">
+        <div class="trial-compare-label">Manage this ticket -- assigning below moves this to a real person, separate from the AI's queue decision above</div>
+        <label>Status</label>
+        <select id="admin-status-input">
+          <option value="New">New</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Closed">Closed</option>
+        </select>
+        <label>Resolution comment</label>
+        <input type="text" id="admin-comment-input" placeholder="e.g. Refund processed, confirmed with customer." value="${(t.resolution_comment || "").replace(/"/g, '&quot;')}" />
+        <div class="admin-override-note">Leave the three overrides below on "Keep AI's decision" unless the AI actually got it wrong.</div>
+        <label>Override category</label>
+        <select id="admin-category-input">
+          <option value="">Keep AI's decision (${t.category})</option>
+          <option>Technical</option><option>Billing</option><option>Account</option><option>Security</option><option>General</option>
+        </select>
+        <label>Override priority</label>
+        <select id="admin-priority-input">
+          <option value="">Keep AI's decision (${t.priority})</option>
+          <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+        </select>
+        <label>Override team</label>
+        <select id="admin-team-input">
+          <option value="">Keep AI's decision (${t.assigned_team})</option>
+          <option>IT Support</option><option>Billing Team</option><option>Security Team</option><option>Account Management</option><option>General Support</option>
+        </select>
+        <label>Assign to employee</label>
+        <select id="admin-employee-input">${buildEmployeeOptions(t.assigned_employee_id)}</select>
+        <button class="primary-btn" onclick="saveAdminTicketUpdate('${t.id}')">Save changes</button>
+        <div id="admin-save-status" class="placeholder-text" style="margin-top:8px;"></div>
+      </div>
+    `;
+
+    document.getElementById("admin-status-input").value = t.status || "New";
+    document.getElementById("admin-category-input").value = t.admin_category || "";
+    document.getElementById("admin-priority-input").value = t.admin_priority || "";
+    document.getElementById("admin-team-input").value = t.admin_team || "";
+  } catch (err) {
+    detailDiv.innerHTML = `<p class="error-text">Failed to load ticket: ${err.message}</p>`;
+  }
+}
+
+async function saveAdminTicketUpdate(ticketId) {
+  const statusEl = document.getElementById("admin-save-status");
+  const employeeRaw = document.getElementById("admin-employee-input").value;
+  const payload = {
+    status: document.getElementById("admin-status-input").value,
+    resolution_comment: document.getElementById("admin-comment-input").value || null,
+    admin_category: document.getElementById("admin-category-input").value || null,
+    admin_priority: document.getElementById("admin-priority-input").value || null,
+    admin_team: document.getElementById("admin-team-input").value || null,
+    assigned_employee_id: employeeRaw ? parseInt(employeeRaw, 10) : null,
+  };
+
+  statusEl.textContent = "Saving...";
+  try {
+    const response = await fetch(`/tickets/${ticketId}/admin`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${response.status} - ${text}`);
+    }
+    statusEl.textContent = "Saved.";
+    loadAdminQueue();
+  } catch (err) {
+    statusEl.innerHTML = `<span class="error-text">Failed to save: ${err.message}</span>`;
+  }
+}
+
 let parsedRows = [];
 let lastRoutingResponse = null;
+
+// --- Manual-minutes-per-ticket assumption: user-editable, persisted on
+// this device via localStorage. Every time comparison in the app (single
+// ticket note, batch results, lifetime banner) reads from here instead of
+// a hardcoded number, so the M4S7 evidence reflects the user's own
+// judgment of manual triage time, not a guess baked into the code. ---
+const MANUAL_MINUTES_KEY = "ticketRouterManualMinutesPerTicket";
+
+function getManualMinutes() {
+  const stored = localStorage.getItem(MANUAL_MINUTES_KEY);
+  const parsed = stored ? parseFloat(stored) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3;
+}
+
+function saveManualMinutes() {
+  const input = document.getElementById("manual-minutes-input");
+  const val = parseFloat(input.value);
+  const clean = Number.isFinite(val) && val > 0 ? val : 3;
+  input.value = clean;
+  localStorage.setItem(MANUAL_MINUTES_KEY, String(clean));
+  loadLifetimeStats();
+}
+
+function initManualMinutesInput() {
+  const input = document.getElementById("manual-minutes-input");
+  if (input) input.value = getManualMinutes();
+}
+
+// --- Lifetime Impact banner: every ticket this system has ever routed,
+// not just the current batch or single request. This is the strongest
+// M4S7 evidence -- it grows continuously as the system stays in use. ---
+// Shown on both Home (Customer View) and the Admin Console -- it's the
+// core M4S7 manual-vs-AI evidence, so it stays on Home where it's always
+// visible, and is repeated in Admin since it's also an ops metric there.
+// Both copies share these classes (not ids, since an id must be unique
+// per page and both views exist in the DOM at once), so one fetch
+// updates whichever copy(ies) are present.
+async function loadLifetimeStats() {
+  const subtitles = document.querySelectorAll(".lifetime-stats-subtitle");
+  const rows = document.querySelectorAll(".lifetime-stats-row");
+  if (subtitles.length === 0 || rows.length === 0) return;
+
+  try {
+    const response = await fetch("/stats/time-savings");
+    if (!response.ok) throw new Error(`${response.status}`);
+    const stats = await response.json();
+
+    const manualMinutes = getManualMinutes();
+    const totalTickets = stats.total_tickets_routed || 0;
+    const totalAiMs = stats.total_ai_time_ms || 0;
+    const manualTotalMs = totalTickets * manualMinutes * 60 * 1000;
+    const savedMs = Math.max(manualTotalMs - totalAiMs, 0);
+    const savedHours = savedMs / 3600000;
+
+    const subtitleText = totalTickets > 0
+      ? `Every ticket ever routed by this system -- at a ${manualMinutes} min/ticket manual assumption (editable in Batch Upload tab).`
+      : "No tickets routed yet -- route one to start building this history.";
+
+    const rowHtml = `
+      <div><div class="stat-number">${totalTickets}</div><div class="stat-label">Tickets routed, all time</div></div>
+      <div><div class="stat-number">${(totalAiMs / 1000).toFixed(1)}s</div><div class="stat-label">Total AI processing time</div></div>
+      <div><div class="stat-number">${savedHours.toFixed(1)} hrs</div><div class="stat-label">Estimated manual hours saved</div></div>
+    `;
+
+    subtitles.forEach(el => { el.textContent = subtitleText; });
+    rows.forEach(el => { el.innerHTML = rowHtml; });
+  } catch (err) {
+    subtitles.forEach(el => { el.textContent = "Could not load lifetime stats."; });
+    rows.forEach(el => { el.innerHTML = ""; });
+  }
+}
+
+// --- Manual Timing Trial: the same 20 sample tickets shipped with the
+// project (sample_tickets_20.csv), embedded here so the trial works with
+// zero setup. If a CSV is already loaded on the Batch tab, that's used
+// instead. ---
+const SAMPLE_TICKETS = [
+  { id: "1", subject: "Can't log in - urgent - demo in 30 minutes", description: "I've been locked out of my account for the last 2 hours. I have a client demo in 30 minutes and really need this fixed immediately." },
+  { id: "2", subject: "Charged twice on my invoice", description: "I noticed two charges for the same subscription on my latest invoice. Please refund the duplicate charge." },
+  { id: "3", subject: "Suspicious login attempt on my account", description: "I received an alert about a login from an unknown device in another country. I think my account may have been breached." },
+  { id: "4", subject: "Need to update my account email", description: "I recently changed jobs and need to update the email address linked to my account." },
+  { id: "5", subject: "What are your support hours?", description: "Just wondering what days and hours your support team is available in case I need help later." },
+  { id: "6", subject: "This is ridiculous", description: "I've been on hold for hours and no one has helped me. This is completely unacceptable fix this now!!!" },
+  { id: "7", subject: "Help", description: "Broken." },
+  { id: "8", subject: "Not sure who handles this", description: "I was charged twice on my last invoice and now I can't log into my account to check it. Not sure if this is billing or technical." },
+  { id: "9", subject: "Urgent client demo failing right now", description: "Our integration is throwing errors during a live client demo happening right now. Need immediate assistance." },
+  { id: "10", subject: "Thanks for the quick help earlier", description: "Just wanted to say the last support ticket was resolved quickly and I appreciate it. Small follow up question about billing cycles." },
+  { id: "11", subject: "Can't reset my password", description: "The password reset link in my email keeps expiring before I can click it." },
+  { id: "12", subject: "Requesting a refund for last month", description: "I was billed for a plan I cancelled last month and would like a refund." },
+  { id: "13", subject: "Possible data breach reported by a customer", description: "A customer emailed us saying their data appeared in a leak. Escalating immediately as a potential security incident." },
+  { id: "14", subject: "Change my billing address", description: "I moved recently and need to update the billing address on file." },
+  { id: "15", subject: "Question about upgrading my plan", description: "I'm considering upgrading to the enterprise plan and want to know what changes." },
+  { id: "16", subject: "Still waiting on the same issue from last week", description: "This is the third time I'm writing about this. Nobody has responded and I'm getting frustrated." },
+  { id: "17", subject: "Not working", description: "It's just not working." },
+  { id: "18", subject: "Login error after password change", description: "I changed my password and now I get a billing error message when I try to log in." },
+  { id: "19", subject: "Security alert triggered on our account", description: "Multiple failed login attempts were detected overnight from an unrecognized IP address." },
+  { id: "20", subject: "Small bug in the dashboard", description: "The dashboard chart is showing last month's numbers instead of this month's. Not urgent just wanted to flag it." },
+];
+
+const TRIAL_SUMMARY_KEY = "ticketRouterManualTrialSummary";
+
+let trialTickets = [];
+let trialIndex = 0;
+let trialResults = [];
+let trialTicketStartTime = 0;
+let trialTimerInterval = null;
+
+function startManualTrial() {
+  trialTickets = parsedRows.length > 0 ? parsedRows : SAMPLE_TICKETS;
+  trialIndex = 0;
+  trialResults = [];
+  document.getElementById("trial-source-note").textContent = parsedRows.length > 0
+    ? `Using your ${parsedRows.length}-ticket uploaded CSV from the Batch tab.`
+    : `Using the built-in 20 sample tickets (sample_tickets_20.csv).`;
+  document.getElementById("trial-results-card").style.display = "none";
+  document.getElementById("trial-active-card").style.display = "block";
+  showTrialTicket();
+}
+
+function showTrialTicket() {
+  const ticket = trialTickets[trialIndex];
+  document.getElementById("trial-progress-text").textContent = `Ticket ${trialIndex + 1} of ${trialTickets.length}`;
+  document.getElementById("trial-ticket-subject").textContent = ticket.subject;
+  document.getElementById("trial-ticket-description").textContent = ticket.description;
+  document.getElementById("trial-category-input").value = "";
+  document.getElementById("trial-priority-input").value = "";
+  document.getElementById("trial-team-input").value = "";
+  document.getElementById("trial-sentiment-input").value = "";
+  document.getElementById("trial-review-input").value = "";
+  document.getElementById("trial-confidence-input").value = "";
+  document.getElementById("trial-reason-input").value = "";
+
+  trialTicketStartTime = performance.now();
+  if (trialTimerInterval) clearInterval(trialTimerInterval);
+  const display = document.getElementById("trial-timer-display");
+  display.textContent = "0.0s";
+  trialTimerInterval = setInterval(() => {
+    const elapsed = (performance.now() - trialTicketStartTime) / 1000;
+    display.textContent = `${elapsed.toFixed(1)}s`;
+  }, 100);
+}
+
+async function submitManualDecision() {
+  const category = document.getElementById("trial-category-input").value;
+  const priority = document.getElementById("trial-priority-input").value;
+  const team = document.getElementById("trial-team-input").value;
+  const sentiment = document.getElementById("trial-sentiment-input").value;
+  const reviewChoice = document.getElementById("trial-review-input").value;
+  const confidenceRaw = document.getElementById("trial-confidence-input").value.trim();
+  const reason = document.getElementById("trial-reason-input").value.trim();
+
+  if (!category || !priority || !team || !sentiment || !reviewChoice) {
+    alert("Select category, priority, team, sentiment, and a review decision before submitting -- that's every field the AI produces, and this trial only means something if both sides answer the same questions.");
+    return;
+  }
+
+  const needsReview = reviewChoice === "true";
+  let confidence = parseInt(confidenceRaw, 10);
+  confidence = Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : null;
+
+  clearInterval(trialTimerInterval);
+  const manualMs = performance.now() - trialTicketStartTime;
+  const ticket = trialTickets[trialIndex];
+
+  let aiResult = null;
+  let aiMs = null;
+  try {
+    const data = await routeTicketRequest(`trial-${ticket.id}`, ticket.subject, ticket.description);
+    aiResult = data.result;
+    aiMs = (data.trace || []).reduce((sum, step) => sum + step.duration_ms, 0);
+  } catch (err) {
+    aiResult = null;
+  }
+
+  // Every categorical field the AI produces is compared against the
+  // matching manual decision -- not just category/priority/team -- so
+  // "agreement" reflects the full routing decision, not a subset of it.
+  const fieldChecks = aiResult ? {
+    category: category === aiResult.category,
+    priority: priority === aiResult.priority,
+    team: team === aiResult.assigned_team,
+    sentiment: sentiment === aiResult.sentiment,
+    review: needsReview === aiResult.needs_human_review,
+  } : null;
+  const mismatches = fieldChecks ? Object.keys(fieldChecks).filter(k => !fieldChecks[k]) : [];
+  const agree = fieldChecks ? mismatches.length === 0 : null;
+
+  trialResults.push({
+    id: ticket.id,
+    subject: ticket.subject,
+    manual_ms: manualMs,
+    manual_category: category,
+    manual_priority: priority,
+    manual_team: team,
+    manual_sentiment: sentiment,
+    manual_needs_review: needsReview,
+    manual_confidence: confidence,
+    manual_reason: reason,
+    ai_ms: aiMs,
+    ai_category: aiResult ? aiResult.category : null,
+    ai_priority: aiResult ? aiResult.priority : null,
+    ai_team: aiResult ? aiResult.assigned_team : null,
+    ai_sentiment: aiResult ? aiResult.sentiment : null,
+    ai_needs_review: aiResult ? aiResult.needs_human_review : null,
+    ai_confidence: aiResult ? aiResult.confidence_score : null,
+    ai_reason: aiResult ? aiResult.reason : null,
+    agree,
+    mismatches,
+  });
+
+  trialIndex++;
+  if (trialIndex < trialTickets.length) {
+    showTrialTicket();
+  } else {
+    finishTrial();
+  }
+}
+
+const TRIAL_FIELD_LABELS = { category: "category", priority: "priority", team: "team", sentiment: "sentiment", review: "review flag" };
+
+function finishTrial() {
+  clearInterval(trialTimerInterval);
+  document.getElementById("trial-active-card").style.display = "none";
+  document.getElementById("trial-results-card").style.display = "block";
+
+  if (trialResults.length === 0) {
+    document.getElementById("trial-summary-stats").innerHTML = '<p class="placeholder-text">No tickets completed -- start the trial again when ready.</p>';
+    document.getElementById("trial-summary-highlight").innerHTML = "";
+    document.getElementById("trial-results-body").innerHTML = "";
+    return;
+  }
+
+  const n = trialResults.length;
+  const totalManualMs = trialResults.reduce((sum, r) => sum + r.manual_ms, 0);
+  const avgManualMs = totalManualMs / n;
+  const avgManualMinutes = avgManualMs / 60000;
+
+  // Speedup and AI-average are computed only over tickets where the AI
+  // call actually succeeded, so it's a fair like-for-like comparison
+  // rather than dividing by a denominator that includes AI failures.
+  const validPairs = trialResults.filter(r => r.ai_ms !== null);
+  const totalManualMsForPairs = validPairs.reduce((sum, r) => sum + r.manual_ms, 0);
+  const totalAiMs = validPairs.reduce((sum, r) => sum + r.ai_ms, 0);
+  const avgAiMs = validPairs.length > 0 ? totalAiMs / validPairs.length : 0;
+  const speedup = totalAiMs > 0 ? (totalManualMsForPairs / totalAiMs).toFixed(0) : "-";
+  const fullMatches = trialResults.filter(r => r.agree === true).length;
+
+  const confidencePairs = trialResults.filter(r => r.manual_confidence !== null && r.ai_confidence !== null);
+  const avgConfidenceGap = confidencePairs.length > 0
+    ? confidencePairs.reduce((sum, r) => sum + Math.abs(r.manual_confidence - r.ai_confidence), 0) / confidencePairs.length
+    : null;
+
+  document.getElementById("trial-summary-stats").innerHTML = `
+    <div><div class="stat-number">${n}</div><div class="stat-label">Tickets you manually triaged</div></div>
+    <div><div class="stat-number">${(avgManualMs / 1000).toFixed(1)}s</div><div class="stat-label">Your average time/ticket (measured)</div></div>
+    <div><div class="stat-number">${avgAiMs.toFixed(0)}ms</div><div class="stat-label">AI average time/ticket (measured)</div></div>
+    <div><div class="stat-number">${speedup}x</div><div class="stat-label">AI faster than you, measured</div></div>
+    <div><div class="stat-number">${fullMatches}/${n}</div><div class="stat-label">Full field match (category, priority, team, sentiment, review)</div></div>
+    ${avgConfidenceGap !== null ? `<div><div class="stat-number">${avgConfidenceGap.toFixed(0)} pts</div><div class="stat-label">Avg confidence gap (you vs AI)</div></div>` : ""}
+  `;
+
+  document.getElementById("trial-summary-highlight").innerHTML = `
+    This is real, self-timed data -- not an assumption. Your measured average was
+    <strong>${avgManualMinutes.toFixed(2)} min/ticket</strong>. You can use it everywhere else in the
+    app instead of a guess:
+    <br/><button class="primary-btn" style="margin-top:10px;" onclick="applyTrialAsManualMinutes(${avgManualMinutes})">Use my measured ${avgManualMinutes.toFixed(2)} min/ticket as the manual-time assumption</button>
+  `;
+
+  document.getElementById("trial-results-body").innerHTML = trialResults.map(r => {
+    const aiFailed = r.ai_ms === null;
+    const agreementText = aiFailed
+      ? "AI call failed for this ticket -- no comparison available."
+      : (r.agree ? "Full match across every field." : `Differs on: ${r.mismatches.map(m => TRIAL_FIELD_LABELS[m]).join(", ")}.`);
+    const agreementClass = aiFailed ? "" : (r.agree ? "full" : "partial");
+
+    return `
+      <div class="trial-compare-card">
+        <div class="trial-compare-header">
+          <span class="trial-compare-subject">${r.subject}</span>
+          <span class="trial-compare-time">You: ${(r.manual_ms / 1000).toFixed(1)}s &middot; AI: ${aiFailed ? "failed" : r.ai_ms.toFixed(0) + "ms"}</span>
+        </div>
+        <div class="trial-compare-cols">
+          <div class="trial-compare-col">
+            <div class="trial-compare-label">Your decision</div>
+            <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${r.manual_category}</span>
+            <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${r.manual_priority} priority</span>
+            <span class="badge-pill" style="background:#EEF2FF; color:#4338CA;">${r.manual_team}</span>
+            <span class="badge-pill" style="background:#FEF3C7; color:#92400E;">${r.manual_sentiment} tone</span>
+            <span class="badge-pill" style="background:${r.manual_needs_review ? 'rgba(220,38,38,0.10)' : 'rgba(5,150,105,0.10)'}; color:${r.manual_needs_review ? '#DC2626' : '#059669'};">${r.manual_needs_review ? "Flagged for review" : "Auto-approved"}</span>
+            <div class="trial-compare-confidence">Your confidence: ${r.manual_confidence !== null ? r.manual_confidence + "/100" : "(not entered)"}</div>
+            <p class="trial-compare-reason">"${r.manual_reason || "(no reasoning entered)"}"</p>
+          </div>
+          <div class="trial-compare-col">
+            <div class="trial-compare-label">AI decision</div>
+            ${aiFailed ? '<p class="error-text">AI routing failed for this ticket.</p>' : `
+              <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${r.ai_category}</span>
+              <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${r.ai_priority} priority</span>
+              <span class="badge-pill" style="background:#EEF2FF; color:#4338CA;">${r.ai_team}</span>
+              <span class="badge-pill" style="background:#FEF3C7; color:#92400E;">${r.ai_sentiment} tone</span>
+              <span class="badge-pill" style="background:${r.ai_needs_review ? 'rgba(220,38,38,0.10)' : 'rgba(5,150,105,0.10)'}; color:${r.ai_needs_review ? '#DC2626' : '#059669'};">${r.ai_needs_review ? "Flagged for review" : "Auto-approved"}</span>
+              <div class="trial-compare-confidence">AI confidence: ${r.ai_confidence}/100</div>
+              <p class="trial-compare-reason">"${r.ai_reason}"</p>
+            `}
+          </div>
+        </div>
+        <div class="trial-compare-agreement ${agreementClass}">${agreementText}</div>
+      </div>
+    `;
+  }).join("");
+
+  localStorage.setItem(TRIAL_SUMMARY_KEY, JSON.stringify({
+    ranAt: new Date().toISOString(),
+    ticketCount: n,
+    avgManualMinutes: avgManualMinutes,
+  }));
+  renderLastTrialNote();
+}
+
+function applyTrialAsManualMinutes(minutes) {
+  const input = document.getElementById("manual-minutes-input");
+  input.value = minutes.toFixed(2);
+  saveManualMinutes();
+}
+
+function renderLastTrialNote() {
+  const el = document.getElementById("trial-source-note");
+  const raw = localStorage.getItem(TRIAL_SUMMARY_KEY);
+  if (!raw || !el) return;
+  try {
+    const summary = JSON.parse(raw);
+    const date = new Date(summary.ranAt);
+    el.textContent = `Last self-timed trial: ${summary.ticketCount} tickets, avg ${summary.avgManualMinutes.toFixed(2)} min/ticket, run ${date.toLocaleString()}.`;
+  } catch (err) { /* ignore malformed localStorage content */ }
+}
 
 function copyJsonToClipboard() {
   if (!lastRoutingResponse) return;
@@ -415,17 +1582,59 @@ function resetNodes() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function routeTicketRequest(id, subject, description, simulateFailure) {
+async function routeTicketRequest(id, subject, description, simulateFailure, attachment) {
+  const payload = { id, subject, description, simulate_failure: !!simulateFailure };
+  // attachment is optional -- only the Single Ticket tab ever passes one.
+  // { filename, mimeType, dataBase64 } all three or omitted entirely.
+  if (attachment && attachment.dataBase64) {
+    payload.attachment_filename = attachment.filename;
+    payload.attachment_mime_type = attachment.mimeType;
+    payload.attachment_data_base64 = attachment.dataBase64;
+  }
   const response = await fetch("/tickets/route", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, subject, description, simulate_failure: !!simulateFailure }),
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`${response.status} - ${text}`);
   }
   return response.json();
+}
+
+// --- Optional ticket attachment (Single Ticket tab only) -----------------
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB -- matches the backend's cap
+
+// Reads the chosen file as a base64 string (just the data, no
+// "data:mime;base64," prefix -- the backend only wants the raw payload
+// and already knows the MIME type separately).
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result; // "data:<mime>;base64,<data>"
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getSingleTicketAttachment() {
+  const input = document.getElementById("attachment-input");
+  const statusEl = document.getElementById("attachment-status");
+  if (!input || !input.files || input.files.length === 0) return null;
+
+  const file = input.files[0];
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    if (statusEl) statusEl.textContent = `"${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB) -- attachments are capped at 5MB.`;
+    throw new Error("Attachment too large");
+  }
+
+  const dataBase64 = await readFileAsBase64(file);
+  return { filename: file.name, mimeType: file.type || "application/octet-stream", dataBase64 };
 }
 
 function renderRetryLog(retryLog) {
@@ -487,14 +1696,65 @@ function renderRagContext(retrievedContext) {
   card.style.display = "block";
 }
 
+// A real, unique ID per ticket -- not a hardcoded placeholder. Each
+// submission needs its own ID so the database stores a distinct row per
+// ticket (a fixed ID meant every submission silently overwrote the last
+// one) and so the customer has something real to track their ticket by.
+function generateTicketId() {
+  if (window.crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+// --- "My tickets" (this browser only) -- there's no login in this demo,
+// so there's no real concept of ticket ownership. Rather than mislabel
+// the full system-wide board as personal, this remembers (locally, on
+// this device only) which ticket IDs were actually submitted from here,
+// so the customer can optionally filter down to just those.
+const MY_TICKETS_STORAGE_KEY = "ticketRouterMySubmittedIds";
+
+function recordMySubmittedTicket(ticketId) {
+  try {
+    const ids = getMySubmittedTicketIds();
+    if (!ids.includes(ticketId)) {
+      ids.push(ticketId);
+      localStorage.setItem(MY_TICKETS_STORAGE_KEY, JSON.stringify(ids));
+    }
+  } catch (err) {
+    // localStorage unavailable (private browsing, etc.) -- the toggle
+    // will just show nothing filtered rather than break the page.
+  }
+}
+
+function getMySubmittedTicketIds() {
+  try {
+    const raw = localStorage.getItem(MY_TICKETS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
 async function routeTicket() {
   const subject = document.getElementById("subject-input").value;
   const description = document.getElementById("description-input").value;
   const simulateFailure = document.getElementById("simulate-failure-input").checked;
   const resultPanel = document.getElementById("result-panel");
   const btn = document.getElementById("route-btn");
+  const newTicketId = generateTicketId();
 
   btn.disabled = true;
+
+  let attachment = null;
+  try {
+    attachment = await getSingleTicketAttachment();
+  } catch (err) {
+    // getSingleTicketAttachment() already wrote a clear message into
+    // #attachment-status (e.g. "file too large") -- stop here rather
+    // than submit a ticket that silently drops the attachment.
+    btn.disabled = false;
+    return;
+  }
+
   resultPanel.innerHTML = '<p class="placeholder-text">Routing...</p>';
   renderRetryLog([]);
   renderRagContext([]);
@@ -504,7 +1764,7 @@ async function routeTicket() {
   setNodeState("node-review", "pending", "Waiting...");
 
   try {
-    const data = await routeTicketRequest("482", subject, description, simulateFailure);
+    const data = await routeTicketRequest(newTicketId, subject, description, simulateFailure, attachment);
     const r = data.result;
     const trace = data.trace || [];
     renderRetryLog(data.retry_log || []);
@@ -540,15 +1800,32 @@ async function routeTicket() {
 
     lastRoutingResponse = data;
 
+    const aiTimeMs = trace.reduce((sum, step) => sum + step.duration_ms, 0);
+    const manualMinutes = getManualMinutes();
+    const savedSec = Math.max((manualMinutes * 60000 - aiTimeMs) / 1000, 0).toFixed(1);
+
+    const [newStatusColor, newStatusBg] = STATUS_COLORS["New"];
+
     resultPanel.innerHTML = `
+      <div class="ticket-id-banner">
+        Your ticket ID: <code id="new-ticket-id-text">${newTicketId}</code>
+        <button class="copy-btn" style="background:rgba(29,78,216,0.08); border-color:rgba(29,78,216,0.2); color:#1D4ED8;" onclick="copyTicketIdToClipboard('${newTicketId}', this)">Copy</button>
+        <span>-- save this to track your ticket on the Past Tickets tab.</span>
+      </div>
+      <span class="status-pill" id="new-ticket-status-pill" style="background:${newStatusBg}; color:${newStatusColor}; padding:5px 14px; margin-right:8px;">New</span>
       <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${r.category}</span>
       <span class="badge-pill" style="background:${pBg}; color:${pColor};">${r.priority} priority</span>
+      <span class="placeholder-text" style="font-size:0.72rem; margin-right:2px;">Queue:</span>
       <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${r.assigned_team}</span>
       <span class="badge-pill" style="background:${sBg}; color:${sColor};">${r.sentiment} tone</span>
       <span class="badge-pill" style="background:${reviewBg}; color:${reviewColor};">${reviewText}</span>
+      <div class="placeholder-text" style="margin-top:4px;">Submitted just now.</div>
+      <div id="assignment-note" class="placeholder-text" style="margin-top:2px;">Checking assignment...</div>
+      ${attachment ? `<div style="margin-top:6px;"><a href="/tickets/${newTicketId}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${attachment.filename})</a></div>` : ""}
       <p style="margin-top:14px; color:#374151; font-size:0.92rem;">${r.reason}</p>
-      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Confidence</div>
+      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">AI Confidence</div>
       <div class="confidence-mono">${r.confidence_score}<span style="font-size:1rem; color:#9CA3AF;"> / 100</span></div>
+      <div class="time-savings-note">Routed in ${aiTimeMs.toFixed(0)}ms -- an estimated ${savedSec}s faster than manual triage (~${manualMinutes} min/ticket assumption).</div>
       <div class="json-box">
         <div class="json-box-header">
           <span class="json-box-label">Raw JSON response</span>
@@ -557,11 +1834,55 @@ async function routeTicket() {
         <pre id="json-output">${JSON.stringify(data, null, 2)}</pre>
       </div>
     `;
+
+    recordMySubmittedTicket(newTicketId);
+    loadLifetimeStats();
+    fetchAndShowAssignment(newTicketId);
+
+    // Clear the attachment picker so it isn't accidentally re-attached
+    // to the next ticket submitted from this form.
+    const attachmentInput = document.getElementById("attachment-input");
+    if (attachmentInput) attachmentInput.value = "";
+    const attachmentStatus = document.getElementById("attachment-status");
+    if (attachmentStatus) attachmentStatus.textContent = "";
   } catch (err) {
     resultPanel.innerHTML = `<p class="error-text">Request failed: ${err.message}</p>`;
     resetNodes();
   } finally {
     btn.disabled = false;
+  }
+}
+
+// The ticket is auto-assigned server-side at save time (least-busy
+// employee in the department mapped from the AI's team decision) -- this
+// just fetches the saved record back to show who it landed on, since the
+// route response itself doesn't carry persistence-layer fields.
+async function fetchAndShowAssignment(ticketId) {
+  const noteEl = document.getElementById("assignment-note");
+  if (!noteEl) return;
+  try {
+    const response = await fetch(`/tickets/${ticketId}`);
+    if (!response.ok) throw new Error(`${response.status}`);
+    const t = await response.json();
+    noteEl.textContent = t.assigned_employee_name
+      ? `Auto-assigned to ${t.assigned_employee_name} -- ${t.assigned_department_name} department.`
+      : "Not yet assigned to anyone -- an admin can assign it from the Admin View.";
+
+    // The status pill shown right after submission always starts as a
+    // "New" placeholder (the routing response itself doesn't carry the
+    // persisted lifecycle status) -- reconcile it against the real,
+    // saved status now that it's back. A ticket that landed directly on
+    // someone's desk moves straight to "In Progress", so it shouldn't
+    // sit under a stale "New" pill.
+    const pill = document.getElementById("new-ticket-status-pill");
+    if (pill && t.status) {
+      const [color, bg] = STATUS_COLORS[t.status] || STATUS_COLORS["New"];
+      pill.textContent = t.status;
+      pill.style.background = bg;
+      pill.style.color = color;
+    }
+  } catch (err) {
+    noteEl.textContent = "";
   }
 }
 
@@ -602,6 +1923,10 @@ async function routeBatch() {
   const resultsDiv = document.getElementById("batch-results");
   track.style.display = "block";
 
+  // Read once at the top of the run so every per-ticket and total figure
+  // below uses the same assumption consistently.
+  const manualMinutes = getManualMinutes();
+
   const results = [];
   for (let i = 0; i < parsedRows.length; i++) {
     const row = parsedRows[i];
@@ -609,9 +1934,11 @@ async function routeBatch() {
     try {
       const data = await routeTicketRequest(row.id, row.subject, row.description);
       const aiTimeMs = (data.trace || []).reduce((sum, step) => sum + step.duration_ms, 0);
-      results.push({ ...row, ...data.result, ai_time_ms: aiTimeMs, status: "ok" });
+      const timeSavedSec = Math.max((manualMinutes * 60000 - aiTimeMs) / 1000, 0);
+      results.push({ ...row, ...data.result, ai_time_ms: aiTimeMs, time_saved_sec: timeSavedSec.toFixed(1), status: "ok" });
+      recordMySubmittedTicket(row.id);
     } catch (err) {
-      results.push({ ...row, category: "-", priority: "-", assigned_team: "-", confidence_score: "-", needs_human_review: "-", sentiment: "-", ai_time_ms: 0, reason: err.message, status: "failed" });
+      results.push({ ...row, category: "-", priority: "-", assigned_team: "-", confidence_score: "-", needs_human_review: "-", sentiment: "-", ai_time_ms: 0, time_saved_sec: "0.0", reason: err.message, status: "failed" });
     }
   }
   track.style.display = "none";
@@ -620,18 +1947,23 @@ async function routeBatch() {
   const failed = results.filter(r => r.status === "failed").length;
   const succeeded = results.filter(r => r.status === "ok").length;
 
-  // Manual-routing baseline is a documented estimate, not measured data --
-  // industry guidance generally puts manual ticket triage (read, judge
-  // category/priority, assign) at 2-5 minutes; 3 minutes is used here.
-  const MANUAL_MINUTES_PER_TICKET = 3;
-  const manualTotalMs = succeeded * MANUAL_MINUTES_PER_TICKET * 60 * 1000;
+  // Manual-routing baseline is a user-editable estimate, not measured
+  // data -- industry guidance generally puts manual ticket triage (read,
+  // judge category/priority, assign) at 2-5 minutes/ticket. AI time below
+  // is real, measured from this run's actual trace data.
+  const manualTotalMs = succeeded * manualMinutes * 60 * 1000;
   const aiTotalMs = results.reduce((sum, r) => sum + (r.ai_time_ms || 0), 0);
   const speedup = aiTotalMs > 0 ? (manualTotalMs / aiTotalMs).toFixed(0) : "-";
+
+  const maxMs = Math.max(manualTotalMs, aiTotalMs, 1);
+  const manualBarPct = (manualTotalMs / maxMs) * 100;
+  const aiBarPct = Math.max((aiTotalMs / maxMs) * 100, 1.5);
 
   let rowsHtml = results.map(r => `
     <tr>
       <td>${r.id}</td><td>${r.subject}</td><td>${r.category}</td><td>${r.priority}</td>
-      <td>${r.assigned_team}</td><td>${r.sentiment}</td><td>${r.confidence_score}</td><td>${r.needs_human_review}</td><td>${r.status}</td>
+      <td>${r.assigned_team}</td><td>${r.sentiment}</td><td>${r.confidence_score}</td><td>${r.needs_human_review}</td>
+      <td>${r.status === "ok" ? r.time_saved_sec + "s" : "-"}</td><td>${r.status}</td>
     </tr>
   `).join("");
 
@@ -642,71 +1974,100 @@ async function routeBatch() {
       <div><div class="stat-number">${failed}</div><div class="stat-label">Failed requests</div></div>
     </div>
     <div class="orchestration-card" style="margin-top:1.2rem; padding:1.2rem 1.4rem;">
-      <div class="orchestration-title" style="font-size:0.92rem;">Manual vs. AI routing time</div>
-      <div class="orchestration-subtitle" style="margin-bottom:0.8rem;">Manual estimate: ${MANUAL_MINUTES_PER_TICKET} min/ticket (documented industry assumption, not measured). AI time: real, measured from this run's trace data.</div>
+      <div class="orchestration-title" style="font-size:0.92rem;">Manual vs. AI routing time -- this batch</div>
+      <div class="orchestration-subtitle" style="margin-bottom:0.8rem;">Manual estimate: ${manualMinutes} min/ticket (editable above, not measured). AI time: real, measured from this run's trace data.</div>
       <div class="stats-row">
         <div><div class="stat-number">${(manualTotalMs / 60000).toFixed(1)} min</div><div class="stat-label">Estimated manual time (${succeeded} tickets)</div></div>
         <div><div class="stat-number">${(aiTotalMs / 1000).toFixed(1)} sec</div><div class="stat-label">Measured AI time (${succeeded} tickets)</div></div>
         <div><div class="stat-number">${speedup}x</div><div class="stat-label">Faster than manual (estimated)</div></div>
       </div>
+      <div class="bar-chart">
+        <div class="bar-chart-row">
+          <div class="bar-chart-label">Manual (estimated)</div>
+          <div class="bar-track"><div class="bar-fill bar-manual" style="width:${manualBarPct}%"></div></div>
+          <div class="bar-chart-value">${(manualTotalMs / 60000).toFixed(1)} min</div>
+        </div>
+        <div class="bar-chart-row">
+          <div class="bar-chart-label">AI (measured)</div>
+          <div class="bar-track"><div class="bar-fill bar-ai" style="width:${aiBarPct}%"></div></div>
+          <div class="bar-chart-value">${(aiTotalMs / 1000).toFixed(1)} sec</div>
+        </div>
+      </div>
     </div>
     <table>
-      <thead><tr><th>ID</th><th>Subject</th><th>Category</th><th>Priority</th><th>Team</th><th>Sentiment</th><th>Confidence</th><th>Review?</th><th>Status</th></tr></thead>
+      <thead><tr><th>ID</th><th>Subject</th><th>Category</th><th>Priority</th><th>Team</th><th>Sentiment</th><th>Confidence</th><th>Review?</th><th>Time Saved</th><th>Status</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     <button class="primary-btn" style="margin-top:12px;" onclick='downloadCSV(${JSON.stringify(results).replace(/'/g, "&#39;")})'>Download results as CSV</button>
   `;
+
+  // These tickets just got saved to the database, so the all-time totals
+  // grew -- refresh the lifetime banner to reflect it immediately.
+  loadLifetimeStats();
 }
 
-// --- Past Tickets tab (Gmail-inbox-style list + click-through detail) ---
+// --- Past Tickets tab: same Jira-style board as the Admin Console, but
+// read-only (no management panel) -- clicking a card still opens the
+// full detail below. ---
 async function loadPastTickets() {
-  const listDiv = document.getElementById("past-tickets-list");
-  listDiv.innerHTML = '<p class="placeholder-text">Loading...</p>';
+  const board = document.getElementById("past-kanban-board");
+  board.innerHTML = '<p class="placeholder-text">Loading...</p>';
   try {
     const response = await fetch("/tickets");
     if (!response.ok) throw new Error(`${response.status}`);
-    const tickets = await response.json();
-    renderPastTicketsList(tickets);
+    let tickets = await response.json();
+    if (tickets.length === 0) {
+      board.innerHTML = '<p class="placeholder-text">No tickets routed yet -- submit one on the Single Ticket tab.</p>';
+      return;
+    }
+
+    const myOnly = document.getElementById("my-tickets-only-toggle")?.checked;
+    if (myOnly) {
+      const mine = new Set(getMySubmittedTicketIds());
+      tickets = tickets.filter(t => mine.has(t.id));
+      if (tickets.length === 0) {
+        board.innerHTML = '<p class="placeholder-text">No tickets submitted from this browser yet -- uncheck the box above to see every ticket in the system.</p>';
+        return;
+      }
+    }
+
+    board.innerHTML = buildKanbanBoardHtml(tickets, "showPastTicketDetail", "past-card");
   } catch (err) {
-    listDiv.innerHTML = `<p class="error-text">Failed to load past tickets: ${err.message}</p>`;
+    board.innerHTML = `<p class="error-text">Failed to load past tickets: ${err.message}</p>`;
   }
 }
 
-function renderPastTicketsList(tickets) {
-  const listDiv = document.getElementById("past-tickets-list");
-  if (tickets.length === 0) {
-    listDiv.innerHTML = '<p class="placeholder-text">No tickets routed yet -- submit one on the Single Ticket tab.</p>';
-    return;
-  }
+function trackTicketById() {
+  const id = document.getElementById("track-ticket-input").value.trim();
+  if (!id) return;
+  showPastTicketDetail(id);
+}
 
-  listDiv.innerHTML = tickets.map(t => {
-    const [pColor] = PRIORITY_COLORS[t.priority] || ["#9CA3AF"];
-    const date = new Date(t.created_at);
-    const dateStr = date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    return `
-      <div class="ticket-row" onclick="showPastTicketDetail('${t.id}')" id="row-${t.id}">
-        <span class="row-priority-dot" style="background:${pColor};"></span>
-        <div class="row-main">
-          <div class="row-subject">${t.subject}</div>
-          <div class="row-meta">${t.category} &middot; ${t.assigned_team} &middot; ${t.sentiment || "Neutral"} tone</div>
-        </div>
-        ${t.needs_human_review ? '<span class="row-review-flag" title="Needs human review">&#9873;</span>' : ""}
-        <span class="row-date">${dateStr}</span>
-      </div>
-    `;
-  }).join("");
+function copyTicketIdToClipboard(ticketId, btn) {
+  navigator.clipboard.writeText(ticketId).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  }).catch(() => {
+    btn.textContent = "Copy failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+  });
 }
 
 async function showPastTicketDetail(ticketId) {
-  document.querySelectorAll(".ticket-row").forEach(r => r.classList.remove("selected"));
-  const row = document.getElementById(`row-${ticketId}`);
-  if (row) row.classList.add("selected");
+  document.querySelectorAll("#past-kanban-board .kanban-card").forEach(r => r.classList.remove("selected"));
+  const card = document.getElementById(`past-card-${ticketId}`);
+  if (card) card.classList.add("selected");
 
   const detailDiv = document.getElementById("past-ticket-detail");
   detailDiv.innerHTML = '<p class="placeholder-text">Loading...</p>';
 
   try {
     const response = await fetch(`/tickets/${ticketId}`);
+    if (response.status === 404) {
+      detailDiv.innerHTML = '<p class="error-text">No ticket found with that ID. Double-check it and try again.</p>';
+      return;
+    }
     if (!response.ok) throw new Error(`${response.status}`);
     const t = await response.json();
 
@@ -714,6 +2075,8 @@ async function showPastTicketDetail(ticketId) {
     const reviewColor = t.needs_human_review ? "#DC2626" : "#059669";
     const reviewBg = t.needs_human_review ? "rgba(220,38,38,0.10)" : "rgba(5,150,105,0.10)";
     const reviewText = t.needs_human_review ? "Human review required" : "Auto-approved";
+    const [sColor, sBg] = STATUS_COLORS[t.status] || STATUS_COLORS["New"];
+    const submittedStr = new Date(t.created_at).toLocaleString();
 
     const traceHtml = (t.trace || []).map(step => `
       <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
@@ -722,16 +2085,28 @@ async function showPastTicketDetail(ticketId) {
       </div>
     `).join("");
 
+    const hasOverride = t.admin_category || t.admin_priority || t.admin_team;
+
     detailDiv.innerHTML = `
-      <p style="font-weight:700; font-size:1rem; margin:0 0 10px 0;">${t.subject}</p>
-      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 14px 0;">${t.description}</p>
-      <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${t.category}</span>
-      <span class="badge-pill" style="background:${pBg}; color:${pColor};">${t.priority} priority</span>
-      <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${t.assigned_team}</span>
+      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${t.subject}</p>
+      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 6px 0;">${t.description}</p>
+      <div class="placeholder-text" style="margin-bottom:12px;">Submitted ${submittedStr}</div>
+      <span class="status-pill" style="background:${sBg}; color:${sColor}; padding:5px 14px; margin-right:8px;">${t.status || "New"}</span>
+      <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${hasOverride && t.admin_category ? t.admin_category : t.category}</span>
+      <span class="badge-pill" style="background:${pBg}; color:${pColor};">${hasOverride && t.admin_priority ? t.admin_priority : t.priority} priority</span>
+      <span class="placeholder-text" style="font-size:0.72rem; margin-right:2px;">Queue:</span>
+      <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${hasOverride && t.admin_team ? t.admin_team : t.assigned_team}</span>
       <span class="badge-pill" style="background:${reviewBg}; color:${reviewColor};">${reviewText}</span>
+      ${hasOverride ? `<div class="placeholder-text" style="margin-top:6px;">An agent corrected the AI's original call: ${t.category} / ${t.priority} / ${t.assigned_team}.</div>` : ""}
+      ${t.assigned_employee_name ? `<div class="placeholder-text" style="margin-top:6px;">Assigned to ${t.assigned_employee_name} -- ${t.assigned_department_name} department.</div>` : ""}
+      ${t.attachment_filename ? `<div style="margin-top:8px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${t.attachment_filename})</a></div>` : ""}
       <p style="margin-top:12px; color:#374151; font-size:0.88rem;">${t.reason}</p>
-      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Confidence</div>
+      <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">AI Confidence</div>
       <div class="confidence-mono" style="font-size:1.3rem;">${t.confidence_score}<span style="font-size:0.85rem; color:#9CA3AF;"> / 100</span></div>
+      ${t.resolution_comment ? `
+        <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Resolution note</div>
+        <p style="color:#374151; font-size:0.88rem; margin-top:6px;">${t.resolution_comment}</p>
+      ` : ""}
       <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Agent trace</div>
       ${traceHtml}
     `;
@@ -741,7 +2116,7 @@ async function showPastTicketDetail(ticketId) {
 }
 
 function downloadCSV(results) {
-  const headers = ["id","subject","category","priority","assigned_team","sentiment","confidence_score","needs_human_review","ai_time_ms","reason","status"];
+  const headers = ["id","subject","category","priority","assigned_team","sentiment","confidence_score","needs_human_review","ai_time_ms","time_saved_sec","reason","status"];
   const csvLines = [headers.join(",")];
   results.forEach(r => {
     csvLines.push(headers.map(h => `"${String(r[h]).replace(/"/g, '""')}"`).join(","));
@@ -754,6 +2129,11 @@ function downloadCSV(results) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// --- Page init ---
+initManualMinutesInput();
+loadLifetimeStats();
+renderLastTrialNote();
 </script>
 </body>
 </html>
