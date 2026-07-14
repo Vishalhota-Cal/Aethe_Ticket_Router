@@ -49,3 +49,19 @@ class Sentiment(str, Enum):
     FRUSTRATED = "Frustrated"
     NEUTRAL = "Neutral"
     POSITIVE = "Positive"
+
+
+class TicketStatus(str, Enum):
+    """The lifecycle stage of a ticket after it's been routed. This is
+    set and moved forward by an admin/agent working the ticket -- it is
+    completely separate from the AI's routing decision (category,
+    priority, team). A ticket starts at NEW if it couldn't be
+    auto-assigned to anyone yet, or IN_PROGRESS if it was immediately
+    handed to an employee -- an assigned ticket shouldn't sit in the
+    "not yet picked up" column.
+    """
+
+    NEW = "New"
+    IN_PROGRESS = "In Progress"
+    RESOLVED = "Resolved"
+    CLOSED = "Closed"
