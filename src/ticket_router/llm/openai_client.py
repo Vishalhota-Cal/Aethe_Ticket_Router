@@ -25,6 +25,13 @@ class OpenAIClient:
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
+                # Deterministic, not creative -- a classification decision
+                # (category/priority/team) should be as reproducible as
+                # possible for the same input. temperature=0 minimizes
+                # run-to-run sampling variance (mission criterion M4B1:
+                # the same ticket submitted twice should get an
+                # equivalent answer, not a coin-flip between categories).
+                temperature=0,
             )
             return response.choices[0].message.content
 
