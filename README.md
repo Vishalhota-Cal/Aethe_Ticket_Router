@@ -7,6 +7,8 @@ Built by **Vishal Hota**, AI Intern, Calfus
 ![RAG](https://img.shields.io/badge/RAG-Self--Growing%20Knowledge%20Base-7F77DD?style=for-the-badge&logo=OpenAI&logoColor=white)
 ![Self Repairing](https://img.shields.io/badge/Validation-Self--Repairing-059669?style=for-the-badge&logo=checkmarx&logoColor=white)
 ![Resilient](https://img.shields.io/badge/Resilience-Retry%20%2B%20Backoff-EA580C?style=for-the-badge&logo=fireship&logoColor=white)
+![Admin Console](https://img.shields.io/badge/Admin%20Console-Kanban%20%2B%20Auto--Assignment-3454F4?style=for-the-badge&logo=jirasoftware&logoColor=white)
+![Analytics](https://img.shields.io/badge/Analytics-Business%20Dashboard-DB2777?style=for-the-badge&logo=chartdotjs&logoColor=white)
 
 > "Support teams are drowning in tickets. What if the ticket routed itself?"
 
@@ -119,9 +121,32 @@ sequenceDiagram
 
 A standalone script, `scripts/demo_retry_proof.py`, runs this exact scenario outside the UI and prints the attempt-by-attempt log plus a pass/fail assertion — genuine proof for a mentor demo, runnable in ~3 seconds.
 
+**Beyond retrying transient failures, the orchestrator also degrades gracefully if the AI provider is fully unreachable** — an invalid/expired API key, a dead network, a sustained rate limit. Rather than let that raise an unhandled error, `TriageAgent`'s call is wrapped the same way `RetrievalAgent`'s already was: on any failure it falls back to the same safe, human-flagged result a broken-JSON validation failure produces (`General` / `Medium` / needs review), saves it, and returns a normal 200 response instead of a 500. Verified with a dedicated regression test (`test_route_degrades_gracefully_when_llm_provider_is_unreachable`) that forces every call to fail and asserts the API never crashes.
+
+Two more small but deliberate reliability choices: the OpenAI triage call runs at `temperature=0` (a classification decision should be as reproducible as possible — the same ticket submitted twice should get an equivalent answer, not a coin-flip), and `Ticket.subject`/`description` are capped at 300/5000 characters so one oversized paste can't balloon LLM cost or hit a provider token limit unpredictably.
+
 ---
 
-## 📈 V1 → V2: how this evolved
+## 🖥 Admin Console — the operational side of the same app
+
+Everything above describes the AI pipeline; this is what a real support team actually does with its output. A **Customer / Admin view toggle** in the header switches between the two — no login (a deliberate demo-scope choice, not an oversight; see Known Limitations) — but the underlying data is exactly the same:
+
+- **Jira-style Kanban board** (New → In Progress → Resolved → Closed) on both the customer's Past Tickets tab (read-only) and the Admin Console (editable), sorted by priority within each column, backed by an indexed `status` column so it stays fast as the ticket count grows.
+- **Employee & department directory** — a realistic 15-department org chart (IT, Finance, Security, HR, Legal, Sales, Engineering, etc.), each with seeded employees. An admin can add more of either at any time.
+- **Automatic, load-balanced assignment** — every routed ticket is assigned server-side to the least-busy active employee in the department mapped from the AI's team decision (fewest open New/In Progress tickets, ties broken deterministically). A ticket that lands directly on someone's desk starts at **In Progress**, not **New** — an assigned ticket sitting in a "not yet picked up" column would be a contradiction.
+- **Admin overrides** — an admin can correct the AI's category/priority/team, add a resolution note, or reassign to a different employee. The AI's original call is never overwritten, only stored alongside the correction, so both stay visible and auditable.
+
+## 📎 Ticket attachments
+
+Optional file upload (image, video, PDF, or doc — 5MB cap) on the Single Ticket tab. Stored as base64 directly on the ticket row (no separate blob store needed at this scale) and served back through a dedicated `GET /tickets/{id}/attachment` endpoint with the correct content type and an `inline` disposition, so clicking "View attachment" opens it in a new tab instead of forcing a download. The filename is sanitized before it ever reaches an HTTP header, so a filename containing a stray quote or line break can't inject into the response.
+
+## 📊 Business analytics
+
+A third Admin Console tab answers the questions a real support manager would actually ask: which department is getting the most tickets (chart), category/priority/sentiment breakdown, how much an admin has had to correct the AI (a trust/accuracy proxy), how evenly workload is spread across employees, and average time-to-resolution. All plain historical aggregates — nothing here enforces a deadline or threshold (deliberately not an SLA/aging system).
+
+---
+
+## 📈 V1 → V2 → V3: how this evolved
 
 | Stage | What it added |
 |---|---|
@@ -130,6 +155,9 @@ A standalone script, `scripts/demo_retry_proof.py`, runs this exact scenario out
 | **V2.1 — Mission alignment** | Sentiment analysis folded into the same triage call (no extra cost), the 3 required edge cases (angry / very short / ambiguous) handled with dedicated tests, 20-sample-ticket CSV, manual-vs-AI time comparison. |
 | **V2.2 — Refinement pass** | Deterministic escalation for very-short/vague tickets (not left to AI self-reported confidence), tightened sentiment prompt calibration, live "Retry & Anomaly Log" panel, fault-injection proof of resilience. |
 | **V2.3 — RAG** | Retrieval Agent as a real 4th pipeline step, OpenAI + offline mock embeddings, cosine-similarity knowledge base that grows with usage, "Similar Tickets Used" live panel, "Past Tickets" inbox-style browsing tab, raw JSON output with one-click copy. |
+| **V3 — Admin Console** | Ticket lifecycle (`New`/`In Progress`/`Resolved`/`Closed`), Customer/Admin view toggle, Jira-style Kanban board on both sides, 15-department employee directory with automatic load-balanced assignment, admin correction/override workflow. |
+| **V3.1 — Attachments & Analytics** | Optional file attachments on tickets (base64-stored, served via a dedicated endpoint with sanitized headers), a business analytics dashboard (department/category/priority/sentiment breakdown, AI trust metrics, employee workload, daily volume, avg resolution time). |
+| **V3.2 — Reliability & security hardening** | Graceful fallback (not a crash) when the AI provider is fully unreachable, `temperature=0` for consistent classification, input length caps, attachment-filename header sanitization — closing gaps found by re-testing against the mission's own integration-quality checks. |
 
 ---
 
@@ -181,8 +209,11 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 
 1. **Single Ticket tab** — submit a ticket and watch the "Agent Orchestration" panel light up as `RetrievalAgent`, `TriageAgent`, `ValidationAgent`, and `ReviewAgent` each complete, with real measured durations. If a similar past ticket exists, a "Similar Tickets Used (RAG)" panel appears showing exactly what was retrieved and its similarity score. The full raw JSON response is shown at the bottom with a one-click copy button.
 2. **Batch Upload (CSV) tab** — upload `sample_tickets_20.csv` (20 tickets, every category and priority, with the 3 required edge cases embedded). Shows a results table, summary stats, and a documented manual-vs-AI time comparison.
-3. **Past Tickets tab** — every ticket ever routed, newest first, Gmail-inbox style. Click a row for full detail and agent trace.
-4. **GET /tickets/{id}** — look up any previously routed ticket directly, e.g. `http://127.0.0.1:8000/tickets/482`.
+3. **Past Tickets tab** — every ticket ever routed, as a Jira-style Kanban board (New/In Progress/Resolved/Closed). Click a card for full detail, agent trace, and attachment (if any). Optional "only show tickets I submitted from this browser" filter.
+4. **Manual Timing Trial tab** — a real, self-timed manual-vs-AI comparison: you classify a real sample ticket yourself with the clock running, then see it side by side with the AI's own decision and timing.
+5. **Admin View** — toggle in the header (no login, demo-scope only). **Ticket Queue** sub-tab: the same Kanban board, editable — correct the AI's call, leave a resolution note, reassign to a different employee. **Team Directory** sub-tab: manage the 15-department org chart and its employees. **Analytics** sub-tab: department/category/priority/sentiment breakdown, AI trust metrics, employee workload, daily volume.
+6. **GET /tickets/{id}** — look up any previously routed ticket directly, e.g. `http://127.0.0.1:8000/tickets/482`.
+7. **GET /stats/analytics** — the same data backing the Analytics tab, as raw JSON.
 
 ---
 
@@ -210,8 +241,8 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 | Embeddings / RAG | OpenAI `text-embedding-3-small` + cosine similarity (NumPy) | no separate vector database needed at this scale — embeddings live directly in SQLite |
 | Embeddings fallback | Feature-hashing bag-of-words | free, offline, same interface as the real provider |
 | Database | SQLite via SQLAlchemy ORM | zero-setup persistence, ships with every ticket + its trace + its embedding |
-| Frontend | Vanilla HTML/CSS/JS, single file | served same-origin by FastAPI — no CORS, no build step, no separate process |
-| Testing | pytest + pytest-asyncio | 13 tests across agents, orchestration, edge cases, resilience, and RAG math |
+| Frontend | Vanilla HTML/CSS/JS, single file | served same-origin by FastAPI — no CORS, no build step, no separate process. Chart.js (CDN) is the one deliberate exception, used only for two Analytics visuals. |
+| Testing | pytest + pytest-asyncio | 21 tests across agents, orchestration, edge cases, resilience, RAG math, and API round-trips |
 
 ---
 
@@ -223,6 +254,17 @@ LLM_PROVIDER=mock DATABASE_URL="sqlite:///./demo_retry.db" PYTHONPATH=src python
 - [x] Show before/after: manual routing time vs. AI routing time
 - [x] Demo 20 sample tickets to mentor (`sample_tickets_20.csv`)
 - [x] Public GitHub repository with setup instructions and a working demo (this repo)
+
+**Beyond the brief:**
+
+- [x] RAG retrieval layer + self-growing knowledge base
+- [x] Real, self-timed manual-vs-AI trial (not just an assumed baseline)
+- [x] Full ticket lifecycle + Jira-style Kanban board on both customer and admin sides
+- [x] 15-department employee directory with automatic, load-balanced ticket assignment
+- [x] Admin correction/override workflow with full audit trail (AI's original call never overwritten)
+- [x] Optional ticket attachments (image/video/PDF/doc)
+- [x] Business analytics dashboard (department/category/priority/sentiment, AI trust metrics, workload, volume, resolution time)
+- [x] Graceful degradation on AI provider outage, proven with a dedicated regression test
 
 ---
 
@@ -247,6 +289,7 @@ src/ticket_router/
   observability/   structured, correlation-ID-tagged logging
   config/          environment-driven settings
   api/             FastAPI service
+    routes/        tickets, admin, employees, stats (incl. analytics), health -- one file per concern
   ui/              standalone HTML/CSS/JS frontend, served by the API
 scripts/
   demo_retry_proof.py   standalone proof that retry/backoff recovers from a real induced failure
@@ -260,8 +303,9 @@ tests/
 ## ⚠️ Known limitations / not yet built
 
 - Repository calls are synchronous SQLAlchemy calls made directly inside async code — fine at this scale, a production system would use an async driver or a thread pool.
-- No auth or rate limiting — anyone reaching the API can submit unlimited tickets (and OpenAI spend). Fine for a demo, not for production.
+- No auth or rate limiting — anyone reaching the API can submit unlimited tickets (and OpenAI spend), and the Customer/Admin toggle is a UI switch, not a security boundary. Fine for a demo, not for production. A consequence of no auth: ticket IDs are client-generated (UUID) with no ownership model, so the Past Tickets board shows every ticket in the system by default (a "only show tickets I submitted from this browser" filter, backed by localStorage rather than real auth, narrows this for the demo).
 - Embeddings are stored as JSON text in SQLite rather than a dedicated vector database — a deliberate simplicity choice at this scale, since the knowledge base is small enough that brute-force cosine similarity over a few hundred/thousand rows is instant.
+- No email notifications and no SLA/aging/escalation-by-deadline logic — the Analytics tab reports a plain historical average resolution time, but nothing here tracks or enforces a response-time target. Out of scope by design for this round of work, not an oversight.
 
 ---
 
