@@ -42,6 +42,52 @@ class TicketRoutingOrchestrator:
         self.validation_agent = ValidationAgent()
         self.review_agent = ReviewAgent()
 
+    @staticmethod
+    def _safe_fallback_result(reason: str) -> RoutingResult:
+        """The one safe, always-valid result this system falls back to
+        whenever it can't produce a real AI decision -- whether that's
+        because the AI's output never became valid JSON (see
+        ValidationFailedError below) or because the AI provider itself
+        is unreachable (bad key, network outage, rate limit). Either
+        way: never crash, never leave the ticket unrouted, always flag
+        it for a human instead of guessing.
+        """
+        return RoutingResult(
+            category=Category.GENERAL,
+            priority=Priority.MEDIUM,
+            assigned_team=Team.GENERAL_SUPPORT,
+            reason=reason,
+            confidence_score=0,
+            needs_human_review=True,
+        )
+
+    def _save_fallback(
+        self,
+        ticket: Ticket,
+        correlation_id: str,
+        trace: List[TraceStep],
+        context: TicketContext,
+        fallback: RoutingResult,
+    ) -> RoutingResponse:
+        self.repository.save(
+            ticket_id=ticket.id,
+            correlation_id=correlation_id,
+            subject=ticket.subject,
+            description=ticket.description,
+            result=fallback,
+            trace=[step.model_dump() for step in trace],
+            embedding=context.ticket_embedding,
+            attachment_filename=ticket.attachment_filename,
+            attachment_mime_type=ticket.attachment_mime_type,
+            attachment_data=ticket.attachment_data_base64,
+        )
+        return RoutingResponse(
+            result=fallback,
+            trace=trace,
+            retry_log=context.retry_log,
+            retrieved_context=context.retrieved_context,
+        )
+
     async def route(self, ticket: Ticket, correlation_id: str) -> RoutingResponse:
         context = TicketContext(ticket=ticket, correlation_id=correlation_id)
         trace: List[TraceStep] = []
@@ -71,10 +117,35 @@ class TicketRoutingOrchestrator:
                 correlation_id, error,
             )
 
+        # TriageAgent is the one step with a hard external dependency (a
+        # real LLM call). call_with_retry inside it already retries
+        # transient failures with backoff, and openai_client.py wraps
+        # every request-time failure as LLMProviderError -- but a bad
+        # API key or broken network can also surface as something else
+        # entirely (e.g. the provider SDK failing while *constructing*
+        # its client, before a request is even attempted). Rather than
+        # trust that every failure mode is perfectly wrapped, this
+        # catches broadly here, the same way the RetrievalAgent call
+        # above does: from the caller's perspective, "the AI is
+        # unreachable" should always degrade to the same safe,
+        # human-flagged fallback a validation failure gets below --
+        # never an unhandled 500, no matter *how* the AI provider failed.
         start = time.perf_counter()
-        triage_result = await self.triage_agent.execute(context)
-        record("TriageAgent", start, triage_result.success)
-        context.raw_ai_response = triage_result.data
+        try:
+            triage_result = await self.triage_agent.execute(context)
+            record("TriageAgent", start, triage_result.success)
+            context.raw_ai_response = triage_result.data
+        except Exception as error:
+            record("TriageAgent", start, False)
+            logger.warning(
+                "[%s] TriageAgent failed -- AI provider unavailable (%s): %s",
+                correlation_id, type(error).__name__, error,
+            )
+            fallback = self._safe_fallback_result(
+                "AI provider is currently unavailable (connection, authentication, "
+                "or rate-limit failure); this ticket needs manual triage."
+            )
+            return self._save_fallback(ticket, correlation_id, trace, context, fallback)
 
         start = time.perf_counter()
         try:
@@ -84,29 +155,10 @@ class TicketRoutingOrchestrator:
             record("ValidationAgent", start, False)
             logger.warning("[%s] Validation failed permanently: %s", correlation_id, error)
 
-            fallback = RoutingResult(
-                category=Category.GENERAL,
-                priority=Priority.MEDIUM,
-                assigned_team=Team.GENERAL_SUPPORT,
-                reason="Automated routing failed after repair attempts; needs manual triage.",
-                confidence_score=0,
-                needs_human_review=True,
+            fallback = self._safe_fallback_result(
+                "Automated routing failed after repair attempts; needs manual triage."
             )
-            self.repository.save(
-                ticket_id=ticket.id,
-                correlation_id=correlation_id,
-                subject=ticket.subject,
-                description=ticket.description,
-                result=fallback,
-                trace=[step.model_dump() for step in trace],
-                embedding=context.ticket_embedding,
-            )
-            return RoutingResponse(
-                result=fallback,
-                trace=trace,
-                retry_log=context.retry_log,
-                retrieved_context=context.retrieved_context,
-            )
+            return self._save_fallback(ticket, correlation_id, trace, context, fallback)
 
         context.draft_result = validation_result.data
 
@@ -124,6 +176,9 @@ class TicketRoutingOrchestrator:
             result=final_result,
             trace=[step.model_dump() for step in trace],
             embedding=context.ticket_embedding,
+            attachment_filename=ticket.attachment_filename,
+            attachment_mime_type=ticket.attachment_mime_type,
+            attachment_data=ticket.attachment_data_base64,
         )
 
         logger.info(

@@ -9,23 +9,66 @@ the caller looks like.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ticket_router.domain.enums import Category, Priority, Sentiment, Team
+
+# Attachments are stored as base64 text directly on the ticket row (see
+# persistence/models.py) -- there's no separate blob store in this demo
+# app. Capped well under typical request-body limits so a customer
+# can't accidentally (or deliberately) submit something huge; ~5MB of
+# real file data becomes ~6.7MB once base64-encoded (a 4/3 size
+# expansion), so the base64 string itself is capped a little above
+# that to leave headroom for encoding overhead.
+MAX_ATTACHMENT_BASE64_CHARS = 7_000_000
 
 
 class Ticket(BaseModel):
     """A support ticket exactly as it arrives from the outside world."""
 
     id: str
-    subject: str
-    description: str
+    # Empty subject/description is allowed through on purpose -- it's
+    # treated the same as any other very-short/vague ticket (see
+    # ReviewAgent's word-count rule), which handles it *meaningfully*
+    # rather than needing a separate reject path. max_length is a cost/
+    # abuse guard, not a content requirement: without it, one giant
+    # paste could balloon LLM token cost or hit the provider's own
+    # context-window limit unpredictably (mission criterion M4B2 --
+    # very long input should be handled gracefully, not by accident).
+    subject: str = Field(max_length=300)
+    description: str = Field(max_length=5000)
     customer_tier: Optional[str] = None
     # Demo/test-only flag. When true, TriageAgent wraps the real LLM client
     # in a FlakyClient that deliberately fails its first couple of calls, so
     # orchestration/resilience.py's retry-with-backoff logic can be proven
     # live, on demand, instead of only being trusted from code review.
     simulate_failure: bool = False
+
+    # --- Optional attachment (screenshot, short video, doc) a customer
+    # can include with their ticket. All three stay None if nothing was
+    # attached -- this is purely optional and never required to route a
+    # ticket. attachment_data_base64 is the raw file bytes, base64-encoded
+    # by the frontend before this request is ever made. ---
+    attachment_filename: Optional[str] = None
+    attachment_mime_type: Optional[str] = None
+    attachment_data_base64: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_attachment(self) -> "Ticket":
+        if self.attachment_data_base64 and len(self.attachment_data_base64) > MAX_ATTACHMENT_BASE64_CHARS:
+            raise ValueError(
+                "Attachment is too large -- please attach a file under roughly 5MB."
+            )
+        # An attachment is only meaningful as a complete set -- guard
+        # against a filename with no data (or vice versa) reaching the
+        # database in a half-saved state.
+        has_any = any([self.attachment_filename, self.attachment_mime_type, self.attachment_data_base64])
+        has_all = all([self.attachment_filename, self.attachment_mime_type, self.attachment_data_base64])
+        if has_any and not has_all:
+            raise ValueError(
+                "Attachment filename, MIME type, and data must all be provided together, or not at all."
+            )
+        return self
 
 
 class RoutingResult(BaseModel):
