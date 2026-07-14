@@ -1,8 +1,8 @@
 """
 ui/streamlit_app.py
 
-A polished demo frontend, restyled to match Calfus Aetherion's actual
-look: light background, soft purple/pink gradient blur, a floating
+A polished demo frontend: light background, soft purple/pink gradient
+blur, a floating
 pill-shaped header, black bold headlines, indigo-blue accents. Still
 only ever talks to the FastAPI service over HTTP -- never imports the
 orchestrator directly -- so there is exactly one code path that makes
