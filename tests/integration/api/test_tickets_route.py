@@ -29,7 +29,7 @@ def test_get_ticket_after_routing_returns_saved_record(client, sample_ticket):
     assert get_response.status_code == 200
     body = get_response.json()
     assert body["id"] == sample_ticket.id
-    assert len(body["trace"]) == 3
+    assert len(body["trace"]) == 4
 
 
 def test_health_check(client):
