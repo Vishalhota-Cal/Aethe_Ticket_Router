@@ -80,6 +80,8 @@ class TicketRoutingOrchestrator:
             attachment_filename=ticket.attachment_filename,
             attachment_mime_type=ticket.attachment_mime_type,
             attachment_data=ticket.attachment_data_base64,
+            customer_name=ticket.customer_name,
+            customer_email=ticket.customer_email,
         )
         return RoutingResponse(
             result=fallback,
@@ -179,6 +181,8 @@ class TicketRoutingOrchestrator:
             attachment_filename=ticket.attachment_filename,
             attachment_mime_type=ticket.attachment_mime_type,
             attachment_data=ticket.attachment_data_base64,
+            customer_name=ticket.customer_name,
+            customer_email=ticket.customer_email,
         )
 
         logger.info(

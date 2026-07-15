@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import func, inspect, text
+from sqlalchemy import case, func, inspect, text
 from sqlalchemy.orm import joinedload
 
 from ticket_router.domain.enums import TicketStatus
@@ -74,6 +74,16 @@ def _ensure_schema_is_current() -> None:
         # auto-assignment both filter/count by it constantly; this makes
         # sure a database that predates that change gets the index too.
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_status ON tickets (status)"))
+        # Same story for created_at (Analytics groups by day off this
+        # column on every request) and assigned_employee_id (Analytics'
+        # employee-workload aggregate groups by it too) -- both are
+        # indexed on the model now, but only a fresh database picks that
+        # up automatically via create_all(); an existing one needs the
+        # index added explicitly, same as status above.
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_created_at ON tickets (created_at)"))
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_tickets_assigned_employee_id ON tickets (assigned_employee_id)")
+        )
 
 
 _ensure_schema_is_current()
@@ -145,6 +155,11 @@ TEAM_TO_DEPARTMENT = {
 # last (weight 0) rather than raising.
 _PRIORITY_WEIGHT = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
+# A hard ceiling on list_recent()'s limit param -- GET /tickets exposes
+# this directly as a query string value, so without a cap a client could
+# request e.g. limit=10000000 and force one enormous query and response.
+_MAX_LIST_LIMIT = 1000
+
 
 class TicketRepository:
     """The only place in the codebase that talks to the database."""
@@ -209,6 +224,8 @@ class TicketRepository:
         attachment_filename: Optional[str] = None,
         attachment_mime_type: Optional[str] = None,
         attachment_data: Optional[str] = None,
+        customer_name: Optional[str] = None,
+        customer_email: Optional[str] = None,
     ) -> None:
         session = SessionLocal()
         try:
@@ -218,6 +235,10 @@ class TicketRepository:
             # same id, and a re-save should never silently wipe out an
             # existing assignment or an admin's status change.
             existing = session.query(TicketRecord).filter(TicketRecord.id == ticket_id).first()
+            # A satisfaction rating is given well after routing, through
+            # a completely separate call (record_satisfaction_rating
+            # below) -- a re-save here must never quietly erase it.
+            existing_satisfaction_rating = existing.satisfaction_rating if existing is not None else None
             if existing is not None and existing.assigned_employee_id is not None:
                 assigned_employee_id = existing.assigned_employee_id
                 initial_status = existing.status
@@ -254,6 +275,9 @@ class TicketRepository:
                 attachment_filename=attachment_filename,
                 attachment_mime_type=attachment_mime_type,
                 attachment_data=attachment_data,
+                customer_name=customer_name,
+                customer_email=customer_email,
+                satisfaction_rating=existing_satisfaction_rating,
             )
             for step in trace:
                 record.traces.append(
@@ -265,6 +289,28 @@ class TicketRepository:
                 )
             session.merge(record)
             session.commit()
+        finally:
+            session.close()
+
+    def set_satisfaction_rating(self, ticket_id: str, rating: int) -> Optional[TicketRecord]:
+        """Records a customer's post-resolution satisfaction rating (1-5).
+        Only makes sense once a ticket has actually reached Resolved/Closed
+        -- callers (the API route) are expected to enforce that; this
+        method's own job is just the write + the range check, so it stays
+        safe to call regardless of who ends up calling it.
+        Returns the updated record, or None if the ticket doesn't exist.
+        """
+        if rating < 1 or rating > 5:
+            raise ValueError("Satisfaction rating must be between 1 and 5.")
+        session = SessionLocal()
+        try:
+            record = session.query(TicketRecord).filter(TicketRecord.id == ticket_id).first()
+            if record is None:
+                return None
+            record.satisfaction_rating = rating
+            session.commit()
+            session.refresh(record)
+            return record
         finally:
             session.close()
 
@@ -294,7 +340,16 @@ class TicketRepository:
         the right order without the frontend needing to re-sort it.
         Detached from the session before returning, so callers can read
         attributes after the session closes.
+
+        limit is capped server-side (see _MAX_LIST_LIMIT) regardless of
+        what a caller passes -- the API route exposes this as a query
+        param, and without a hard ceiling here a client could ask for an
+        enormous number and force one huge query/response.
         """
+        # SQLite treats a negative LIMIT as "no limit at all" -- clamp the
+        # lower bound too, not just the upper one, so a caller passing
+        # limit=-1 can't accidentally bypass the cap entirely.
+        limit = max(1, min(limit, _MAX_LIST_LIMIT))
         session = SessionLocal()
         try:
             records = (
@@ -367,73 +422,146 @@ class TicketRepository:
         if one was made, otherwise the AI's original call -- this
         reflects what the ticket *actually is* right now, the same way
         the ticket detail views already display it.
+
+        This does every count/average as a SQL aggregate (GROUP BY / AVG
+        / COUNT) instead of pulling every ticket row into Python and
+        summing there. At demo scale (dozens/hundreds of tickets) the two
+        approaches feel identical; at real scale (thousands+) loading
+        every row just to add them up in a loop is the kind of thing that
+        quietly becomes the slowest endpoint in the app, so this does the
+        adding in the database instead, where it belongs.
         """
         session = SessionLocal()
         try:
-            records = (
-                session.query(TicketRecord)
-                .options(joinedload(TicketRecord.assigned_employee).joinedload(Employee.department))
+            total = session.query(func.count(TicketRecord.id)).scalar() or 0
+            if total == 0:
+                return {
+                    "total_tickets": 0,
+                    "department_counts": {},
+                    "category_counts": {},
+                    "priority_counts": {},
+                    "sentiment_counts": {},
+                    "avg_confidence_score": 0,
+                    "pct_needs_human_review": 0,
+                    "pct_admin_override": 0,
+                    "avg_resolution_hours": None,
+                    "resolved_sample_size": 0,
+                    "avg_satisfaction_rating": None,
+                    "satisfaction_sample_size": 0,
+                    "employee_workload": [],
+                    "daily_volume": [],
+                }
+
+            effective_category = func.coalesce(TicketRecord.admin_category, TicketRecord.category)
+            effective_priority = func.coalesce(TicketRecord.admin_priority, TicketRecord.priority)
+            effective_team = func.coalesce(TicketRecord.admin_team, TicketRecord.assigned_team)
+            effective_sentiment = func.coalesce(TicketRecord.sentiment, "Neutral")
+
+            category_counts = dict(
+                session.query(effective_category, func.count(TicketRecord.id))
+                .group_by(effective_category)
                 .all()
             )
-            total = len(records)
+            priority_counts = dict(
+                session.query(effective_priority, func.count(TicketRecord.id))
+                .group_by(effective_priority)
+                .all()
+            )
+            sentiment_counts = dict(
+                session.query(effective_sentiment, func.count(TicketRecord.id))
+                .group_by(effective_sentiment)
+                .all()
+            )
 
+            # TEAM_TO_DEPARTMENT is an application-level mapping, not a DB
+            # table, so this still does the count in SQL (one GROUP BY by
+            # team) and only remaps team -> department in Python afterward
+            # -- a handful of rows, not thousands.
+            team_counts = dict(
+                session.query(effective_team, func.count(TicketRecord.id))
+                .group_by(effective_team)
+                .all()
+            )
             department_counts: dict = {}
-            category_counts: dict = {}
-            priority_counts: dict = {}
-            sentiment_counts: dict = {}
-            daily_counts: dict = {}
-            employee_workload: dict = {}
-            needs_review_count = 0
-            override_count = 0
-            confidence_sum = 0
-            resolution_hours: list = []
+            for team, count in team_counts.items():
+                dept = TEAM_TO_DEPARTMENT.get(team, "Unmapped")
+                department_counts[dept] = department_counts.get(dept, 0) + count
 
-            for r in records:
-                effective_team = r.admin_team or r.assigned_team
-                department = TEAM_TO_DEPARTMENT.get(effective_team, "Unmapped")
-                department_counts[department] = department_counts.get(department, 0) + 1
+            needs_review_count = (
+                session.query(func.count(TicketRecord.id))
+                .filter(TicketRecord.needs_human_review.is_(True))
+                .scalar()
+                or 0
+            )
+            override_count = (
+                session.query(func.count(TicketRecord.id))
+                .filter(
+                    (TicketRecord.admin_category.isnot(None))
+                    | (TicketRecord.admin_priority.isnot(None))
+                    | (TicketRecord.admin_team.isnot(None))
+                )
+                .scalar()
+                or 0
+            )
+            avg_confidence = session.query(func.avg(TicketRecord.confidence_score)).scalar()
+            avg_satisfaction, satisfaction_n = session.query(
+                func.avg(TicketRecord.satisfaction_rating),
+                func.count(TicketRecord.satisfaction_rating),
+            ).one()
 
-                effective_category = r.admin_category or r.category
-                category_counts[effective_category] = category_counts.get(effective_category, 0) + 1
+            # SQLite has no native "hours between two timestamps" -- but
+            # julianday() turns a timestamp into a day-count float, so
+            # subtracting and multiplying by 24 gets hours without ever
+            # pulling the raw datetimes into Python.
+            resolution_expr = (
+                func.julianday(TicketRecord.updated_at) - func.julianday(TicketRecord.created_at)
+            ) * 24.0
+            resolution_rows = (
+                session.query(resolution_expr)
+                .filter(
+                    TicketRecord.status.in_(["Resolved", "Closed"]),
+                    TicketRecord.created_at.isnot(None),
+                    TicketRecord.updated_at.isnot(None),
+                )
+                .all()
+            )
+            resolution_hours = [row[0] for row in resolution_rows if row[0] is not None and row[0] >= 0]
 
-                effective_priority = r.admin_priority or r.priority
-                priority_counts[effective_priority] = priority_counts.get(effective_priority, 0) + 1
+            day_expr = func.date(TicketRecord.created_at)
+            daily_rows = (
+                session.query(day_expr, func.count(TicketRecord.id))
+                .group_by(day_expr)
+                .order_by(day_expr)
+                .all()
+            )
+            daily_volume = [{"date": d, "count": c} for d, c in daily_rows][-30:]
 
-                sentiment = r.sentiment or "Neutral"
-                sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
-
-                if r.needs_human_review:
-                    needs_review_count += 1
-                if r.admin_category or r.admin_priority or r.admin_team:
-                    override_count += 1
-                confidence_sum += r.confidence_score or 0
-
-                if r.created_at:
-                    day_key = r.created_at.date().isoformat()
-                    daily_counts[day_key] = daily_counts.get(day_key, 0) + 1
-
-                if r.status in ("Resolved", "Closed") and r.created_at and r.updated_at:
-                    delta_hours = (r.updated_at - r.created_at).total_seconds() / 3600.0
-                    if delta_hours >= 0:
-                        resolution_hours.append(delta_hours)
-
-                if r.assigned_employee_id is not None:
-                    entry = employee_workload.setdefault(
-                        r.assigned_employee_id,
-                        {
-                            "employee_name": r.assigned_employee.name if r.assigned_employee else "Unknown",
-                            "department_name": (
-                                r.assigned_employee.department.name
-                                if r.assigned_employee and r.assigned_employee.department
-                                else "Unknown"
-                            ),
-                            "open_count": 0,
-                            "total_count": 0,
-                        },
-                    )
-                    entry["total_count"] += 1
-                    if r.status in ("New", "In Progress"):
-                        entry["open_count"] += 1
+            open_case = case((TicketRecord.status.in_(["New", "In Progress"]), 1), else_=0)
+            workload_rows = (
+                session.query(
+                    Employee.name,
+                    Department.name,
+                    func.count(TicketRecord.id),
+                    func.sum(open_case),
+                )
+                .join(Employee, Employee.id == TicketRecord.assigned_employee_id)
+                .outerjoin(Department, Department.id == Employee.department_id)
+                .filter(TicketRecord.assigned_employee_id.isnot(None))
+                .group_by(Employee.id, Employee.name, Department.name)
+                .all()
+            )
+            employee_workload = sorted(
+                (
+                    {
+                        "employee_name": employee_name or "Unknown",
+                        "department_name": department_name or "Unknown",
+                        "open_count": int(open_count or 0),
+                        "total_count": int(total_count or 0),
+                    }
+                    for employee_name, department_name, total_count, open_count in workload_rows
+                ),
+                key=lambda e: -e["open_count"],
+            )
 
             return {
                 "total_tickets": total,
@@ -441,19 +569,19 @@ class TicketRepository:
                 "category_counts": category_counts,
                 "priority_counts": priority_counts,
                 "sentiment_counts": sentiment_counts,
-                "avg_confidence_score": round(confidence_sum / total, 1) if total else 0,
+                "avg_confidence_score": round(avg_confidence, 1) if avg_confidence is not None else 0,
                 "pct_needs_human_review": round(needs_review_count / total * 100, 1) if total else 0,
                 "pct_admin_override": round(override_count / total * 100, 1) if total else 0,
                 "avg_resolution_hours": (
                     round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else None
                 ),
                 "resolved_sample_size": len(resolution_hours),
-                "employee_workload": sorted(
-                    employee_workload.values(), key=lambda e: -e["open_count"]
+                "avg_satisfaction_rating": (
+                    round(avg_satisfaction, 1) if avg_satisfaction is not None else None
                 ),
-                "daily_volume": [
-                    {"date": d, "count": c} for d, c in sorted(daily_counts.items())[-30:]
-                ],
+                "satisfaction_sample_size": int(satisfaction_n or 0),
+                "employee_workload": employee_workload,
+                "daily_volume": daily_volume,
             }
         finally:
             session.close()

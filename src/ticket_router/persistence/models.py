@@ -30,7 +30,9 @@ class TicketRecord(Base):
     confidence_score = Column(Integer)
     needs_human_review = Column(Boolean)
     sentiment = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Indexed -- Analytics groups tickets by day off this column on every
+    # request, and list_recent() sorts newest-first by it too.
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     # JSON-encoded embedding vector for this ticket's text -- populated
     # after routing so the RAG knowledge base grows with every ticket
     # the system handles. Nullable because older rows (or rows saved
@@ -55,8 +57,9 @@ class TicketRecord(Base):
 
     # Which real person is working this ticket -- separate from
     # assigned_team (the AI's queue/routing decision). Nullable: most
-    # tickets sit unassigned until an admin picks someone.
-    assigned_employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    # tickets sit unassigned until an admin picks someone. Indexed --
+    # Analytics groups every ticket's workload by this column.
+    assigned_employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True, index=True)
     assigned_employee = relationship("Employee")
 
     # --- Optional customer-provided attachment (screenshot, video, doc)
@@ -70,6 +73,19 @@ class TicketRecord(Base):
     attachment_filename = Column(String, nullable=True)
     attachment_mime_type = Column(String, nullable=True)
     attachment_data = Column(Text, nullable=True)
+
+    # --- Who actually submitted this ticket -- optional, since there's no
+    # login in this demo. Without this, nobody working the ticket has any
+    # way to follow up with the person who raised it, which no real
+    # support desk would ship. Purely informational: never used for
+    # routing or auth. ---
+    customer_name = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True)
+
+    # --- Post-resolution customer satisfaction (CSAT), 1-5 -- optional,
+    # only meaningful once a ticket reaches Resolved/Closed. Nullable
+    # until the customer actually rates it (most won't). ---
+    satisfaction_rating = Column(Integer, nullable=True)
 
     traces = relationship("AgentTraceRecord", back_populates="ticket")
 

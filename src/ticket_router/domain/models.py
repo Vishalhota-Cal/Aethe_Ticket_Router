@@ -38,6 +38,12 @@ class Ticket(BaseModel):
     subject: str = Field(max_length=300)
     description: str = Field(max_length=5000)
     customer_tier: Optional[str] = None
+    # Who actually submitted this -- optional, since there's no login in
+    # this demo, but without it nobody working the ticket has any way to
+    # follow up with the person who raised it. Never used for routing or
+    # auth, purely informational.
+    customer_name: Optional[str] = Field(default=None, max_length=200)
+    customer_email: Optional[str] = Field(default=None, max_length=200)
     # Demo/test-only flag. When true, TriageAgent wraps the real LLM client
     # in a FlakyClient that deliberately fails its first couple of calls, so
     # orchestration/resilience.py's retry-with-backoff logic can be proven

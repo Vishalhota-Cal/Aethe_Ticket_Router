@@ -56,6 +56,44 @@
   .hero-title { font-size: 2.6rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.5rem 0; }
   .hero-subtitle { color: #4B5563; font-size: 1.02rem; max-width: 680px; margin-bottom: 2.2rem; }
 
+  /* Contact Us -- a small header icon that opens a form modal, rather
+     than a raw phone number/email banner. */
+  .header-icon-btn {
+    width: 38px; height: 38px; border-radius: 50%; background: #F3F4F6; border: none;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s ease;
+  }
+  .header-icon-btn:hover { background: #E5E7EB; }
+  .header-icon-btn svg { width: 18px; height: 18px; stroke: #6B7280; }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(17,24,39,0.45);
+    align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-card {
+    background: #fff; border-radius: 18px; padding: 1.6rem 1.6rem 1.4rem 1.6rem;
+    width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 700; font-size: 1.05rem; margin-bottom: 0.6rem;
+  }
+  .modal-close-btn {
+    border: none; background: none; font-size: 1.3rem; line-height: 1; cursor: pointer;
+    color: #6B7280; padding: 4px;
+  }
+  .form-error {
+    background: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25); color: #B91C1C;
+    border-radius: 10px; padding: 8px 12px; font-size: 0.82rem; margin-bottom: 0.9rem;
+  }
+
+  /* CSAT star rating -- shown once a ticket is Resolved/Closed and not yet rated */
+  .csat-star-btn {
+    background: none; border: none; cursor: pointer; font-size: 1.4rem; color: #D1D5DB;
+    padding: 2px 3px; transition: color 0.1s ease; line-height: 1;
+  }
+  .csat-star-btn:hover { color: #FBBF24; }
+
   .view-toggle { display: flex; background: #F3F4F6; border-radius: 999px; padding: 3px; gap: 2px; flex-shrink: 0; }
   .view-toggle-btn {
     border: none; background: none; padding: 7px 16px; border-radius: 999px; font-size: 0.82rem;
@@ -92,6 +130,7 @@
   }
   .kanban-card-meta { font-size: 0.72rem; color: #9CA3AF; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .kanban-card-priority-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .attachment-icon { width: 11px; height: 11px; stroke: #9CA3AF; vertical-align: -1px; margin-right: 2px; }
 
   .department-chip {
     display: inline-flex; align-items: center; gap: 6px; background: #F3F0FA; color: #6D5BD0;
@@ -135,7 +174,13 @@
     padding: 1rem 1.1rem; text-align: left; position: relative; transition: all 0.3s ease;
   }
   .flow-node.orchestrator-node { background: #F3F0FA; border-color: rgba(109,91,208,0.25); }
-  .flow-node .node-icon { font-size: 1.2rem; margin-bottom: 6px; display: block; }
+  .node-icon-badge {
+    width: 34px; height: 34px; border-radius: 50%; background: #EEF0F3;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+  }
+  .node-icon-badge svg { width: 17px; height: 17px; stroke: #6B7280; }
+  .flow-node.orchestrator-node .node-icon-badge { background: rgba(109,91,208,0.13); }
+  .flow-node.orchestrator-node .node-icon-badge svg { stroke: #6D5BD0; }
   .flow-node .node-name { font-weight: 700; font-size: 0.92rem; margin-bottom: 2px; }
   .flow-node .node-desc { color: #6B7280; font-size: 0.74rem; line-height: 1.3; }
   .flow-node .node-status {
@@ -380,7 +425,36 @@
       <button class="view-toggle-btn active" id="view-btn-customer" onclick="switchView('customer')">Customer View</button>
       <button class="view-toggle-btn" id="view-btn-admin" onclick="switchView('admin')">Admin View</button>
     </div>
+    <!-- Contact Us -- a direct human escalation path alongside self-service
+         routing. Deliberately NOT a raw phone number/email display -- this
+         opens a small form (name / contact / issue) that files a real,
+         trackable ticket through the same pipeline as everything else,
+         rather than sending an actual email (out of scope by design). -->
+    <button class="header-icon-btn" id="contact-us-btn" onclick="openContactModal()" title="Contact us" aria-label="Contact us">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    </button>
     <button class="header-cta-btn" onclick="document.getElementById('tab-single').scrollIntoView({behavior:'smooth', block:'start'})">Try it live</button>
+  </div>
+
+  <!-- CONTACT US MODAL -->
+  <div class="modal-overlay" id="contact-modal-overlay" onclick="if(event.target===this) closeContactModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span>Contact us</span>
+        <button class="modal-close-btn" onclick="closeContactModal()" aria-label="Close">&times;</button>
+      </div>
+      <p class="placeholder-text" style="margin-bottom:1rem;">
+        Tell us what's going on and we'll file it as a ticket for you.
+      </p>
+      <div id="contact-modal-error" class="form-error" style="display:none;"></div>
+      <label>Your name</label>
+      <input type="text" id="contact-name" placeholder="Jane Doe" maxlength="200" />
+      <label>Email or phone</label>
+      <input type="text" id="contact-email" placeholder="jane@example.com" maxlength="200" />
+      <label>What's the issue?</label>
+      <textarea id="contact-issue" rows="4" placeholder="Describe what you need help with..." maxlength="5000"></textarea>
+      <button class="primary-btn" onclick="submitContactForm()" id="contact-submit-btn">Send</button>
+    </div>
   </div>
 
   <div id="view-customer">
@@ -397,34 +471,44 @@
     <div class="orchestration-subtitle">One orchestrator coordinates four specialized agents for every ticket. Submit one below to see it run live.</div>
     <div class="flow-row">
       <div class="flow-node orchestrator-node">
-        <span class="node-icon">&#9906;</span>
+        <span class="node-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </span>
         <div class="node-name">Orchestrator</div>
         <div class="node-desc">Sequences the agents, handles failure, saves the result.</div>
       </div>
       <div class="flow-arrow">&#8594;</div>
       <div class="flow-node pending" id="node-retrieval">
-        <span class="node-icon">&#128269;</span>
+        <span class="node-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
         <div class="node-name">Retrieval Agent</div>
         <div class="node-desc">Finds similar past tickets via embeddings + cosine similarity (RAG).</div>
         <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
       </div>
       <div class="flow-arrow">&#8594;</div>
       <div class="flow-node pending" id="node-triage">
-        <span class="node-icon">&#128172;</span>
+        <span class="node-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        </span>
         <div class="node-name">Triage Agent</div>
         <div class="node-desc">Classifies category, priority, and team in one AI call.</div>
         <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
       </div>
       <div class="flow-arrow">&#8594;</div>
       <div class="flow-node pending" id="node-validation">
-        <span class="node-icon">&#9989;</span>
+        <span class="node-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </span>
         <div class="node-name">Validation Agent</div>
         <div class="node-desc">Checks the schema, self-repairs bad AI output, retries.</div>
         <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
       </div>
       <div class="flow-arrow">&#8594;</div>
       <div class="flow-node pending" id="node-review">
-        <span class="node-icon">&#128065;</span>
+        <span class="node-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </span>
         <div class="node-name">Review Agent</div>
         <div class="node-desc">Deterministic rules decide if a human should check it.</div>
         <div class="node-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
@@ -465,6 +549,10 @@
     <div class="grid-2">
       <div class="glass-card">
         <h3>Submit a ticket</h3>
+        <label>Your name (optional)</label>
+        <input type="text" id="customer-name-input" maxlength="200" placeholder="Jane Doe" />
+        <label>Your email (optional)</label>
+        <input type="text" id="customer-email-input" maxlength="200" placeholder="jane@example.com" />
         <label>Subject</label>
         <input type="text" id="subject-input" maxlength="300" value="Can't log in - urgent, demo in 30 minutes" />
         <label>Description</label>
@@ -810,7 +898,7 @@ function renderEmployeeWorkloadBars(workload) {
     <div class="bar-chart">
       ${workload.map((e, i) => `
         <div class="bar-chart-row">
-          <div class="bar-chart-label">${e.employee_name} (${e.department_name})</div>
+          <div class="bar-chart-label">${escapeHtml(e.employee_name)} (${escapeHtml(e.department_name)})</div>
           <div class="bar-track"><div class="bar-fill" style="width:${(e.open_count / max) * 100}%; background:${ANALYTICS_PALETTE[i % ANALYTICS_PALETTE.length]};"></div></div>
           <div class="bar-chart-value">${e.open_count} open / ${e.total_count} total</div>
         </div>
@@ -888,6 +976,7 @@ async function loadAnalytics() {
       <div><div class="stat-number">${data.pct_needs_human_review}%</div><div class="stat-label">Flagged for human review</div></div>
       <div><div class="stat-number">${data.pct_admin_override}%</div><div class="stat-label">Admin corrected the AI</div></div>
       <div><div class="stat-number">${data.avg_resolution_hours !== null ? data.avg_resolution_hours + "h" : "--"}</div><div class="stat-label">Avg time to Resolved/Closed${data.resolved_sample_size ? ` (n=${data.resolved_sample_size})` : ""}</div></div>
+      <div><div class="stat-number">${data.avg_satisfaction_rating !== null ? data.avg_satisfaction_rating + " / 5" : "--"}</div><div class="stat-label">Avg satisfaction (CSAT)${data.satisfaction_sample_size ? ` (n=${data.satisfaction_sample_size})` : ""}</div></div>
     `;
 
     renderBarList("analytics-category-bars", data.category_counts, "No tickets yet.");
@@ -945,8 +1034,8 @@ function renderEmployeeList() {
   empDiv.innerHTML = cachedEmployees.map(e => `
     <div class="employee-row">
       <div class="employee-main">
-        <div class="employee-name">${e.name}</div>
-        <div class="employee-meta">${e.department_name}${e.role ? " &middot; " + e.role : ""}${e.email ? " &middot; " + e.email : ""}</div>
+        <div class="employee-name">${escapeHtml(e.name)}</div>
+        <div class="employee-meta">${escapeHtml(e.department_name)}${e.role ? " &middot; " + escapeHtml(e.role) : ""}${e.email ? " &middot; " + escapeHtml(e.email) : ""}</div>
       </div>
     </div>
   `).join("");
@@ -1035,7 +1124,7 @@ function buildEmployeeOptions(selectedEmployeeId) {
     const options = employeesInDept.map(e =>
       `<option value="${e.id}" ${String(e.id) === String(selectedEmployeeId) ? "selected" : ""}>${e.name}${e.role ? " (" + e.role + ")" : ""}</option>`
     ).join("");
-    return `<optgroup label="${d.name}">${options}</optgroup>`;
+    return `<optgroup label="${escapeHtml(d.name)}">${options}</optgroup>`;
   }).join("");
   return `<option value="">Unassigned</option>${groups}`;
 }
@@ -1062,10 +1151,10 @@ function buildKanbanBoardHtml(tickets, cardOnClickFn, idPrefix) {
           const assignedText = t.assigned_employee_name || "Unassigned";
           return `
             <div class="kanban-card" onclick="${cardOnClickFn}('${t.id}')" id="${idPrefix}-${t.id}">
-              <div class="kanban-card-subject">${t.attachment_filename ? "&#128206; " : ""}${t.subject}</div>
+              <div class="kanban-card-subject">${t.attachment_filename ? '<svg class="attachment-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>' : ""}${escapeHtml(t.subject)}</div>
               <div class="kanban-card-meta">
                 <span class="kanban-card-priority-dot" style="background:${pColor};"></span>
-                ${t.priority} &middot; Queue: ${t.assigned_team} &middot; ${t.assigned_employee_name ? "Assigned: " : ""}${assignedText}
+                ${t.priority} &middot; Queue: ${t.assigned_team} &middot; ${t.assigned_employee_name ? "Assigned: " : ""}${escapeHtml(assignedText)}
               </div>
             </div>
           `;
@@ -1117,10 +1206,11 @@ async function showAdminTicketDetail(ticketId) {
     const submittedStr = new Date(t.created_at).toLocaleString();
 
     detailDiv.innerHTML = `
-      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${t.subject}</p>
-      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 12px 0;">${t.description}</p>
+      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${escapeHtml(t.subject)}</p>
+      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 12px 0;">${escapeHtml(t.description)}</p>
       <div class="placeholder-text" style="margin-bottom:10px;">Submitted ${submittedStr} &middot; ticket ID <code>${t.id}</code></div>
-      ${t.attachment_filename ? `<div style="margin-bottom:10px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${t.attachment_filename})</a></div>` : ""}
+      ${(t.customer_name || t.customer_email) ? `<div class="placeholder-text" style="margin-bottom:10px;">From: ${escapeHtml(t.customer_name || "(no name given)")}${t.customer_email ? " -- " + escapeHtml(t.customer_email) : ""}</div>` : ""}
+      ${t.attachment_filename ? `<div style="margin-bottom:10px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${escapeHtml(t.attachment_filename)})</a></div>` : ""}
 
       <div class="admin-detail-section" style="margin-top:0; padding-top:0; border-top:none;">
         <div class="trial-compare-label">AI's original decision</div>
@@ -1129,7 +1219,7 @@ async function showAdminTicketDetail(ticketId) {
         <span class="placeholder-text" style="font-size:0.72rem; margin-right:2px;">Queue:</span>
         <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${t.assigned_team}</span>
         <span class="badge-pill" style="background:#FEF3C7; color:#92400E;">${t.sentiment} tone</span>
-        <p style="margin-top:8px; color:#374151; font-size:0.86rem;">"${t.reason}"</p>
+        <p style="margin-top:8px; color:#374151; font-size:0.86rem;">"${escapeHtml(t.reason)}"</p>
         <div class="confidence-mono" style="font-size:1.1rem;">${t.confidence_score}<span style="font-size:0.8rem; color:#9CA3AF;"> / 100 AI confidence</span></div>
       </div>
 
@@ -1143,7 +1233,7 @@ async function showAdminTicketDetail(ticketId) {
           <option value="Closed">Closed</option>
         </select>
         <label>Resolution comment</label>
-        <input type="text" id="admin-comment-input" placeholder="e.g. Refund processed, confirmed with customer." value="${(t.resolution_comment || "").replace(/"/g, '&quot;')}" />
+        <input type="text" id="admin-comment-input" placeholder="e.g. Refund processed, confirmed with customer." value="${escapeHtml(t.resolution_comment || "")}" />
         <div class="admin-override-note">Leave the three overrides below on "Keep AI's decision" unless the AI actually got it wrong.</div>
         <label>Override category</label>
         <select id="admin-category-input">
@@ -1208,6 +1298,24 @@ async function saveAdminTicketUpdate(ticketId) {
 
 let parsedRows = [];
 let lastRoutingResponse = null;
+let lastMainJson = null;
+
+// --- XSS guard --------------------------------------------------------
+// Ticket subject/description/customer name/email/resolution notes all
+// come from whoever submits a ticket -- there's no login gating who can
+// send one. Every place below that drops that text into innerHTML runs
+// it through this first, so a ticket containing e.g. "<img
+// onerror=alert(1)>" as its subject renders as inert text instead of
+// executing in whichever admin's browser happens to open it.
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 // --- Manual-minutes-per-ticket assumption: user-editable, persisted on
 // this device via localStorage. Every time comparison in the app (single
@@ -1486,7 +1594,7 @@ function finishTrial() {
     return `
       <div class="trial-compare-card">
         <div class="trial-compare-header">
-          <span class="trial-compare-subject">${r.subject}</span>
+          <span class="trial-compare-subject">${escapeHtml(r.subject)}</span>
           <span class="trial-compare-time">You: ${(r.manual_ms / 1000).toFixed(1)}s &middot; AI: ${aiFailed ? "failed" : r.ai_ms.toFixed(0) + "ms"}</span>
         </div>
         <div class="trial-compare-cols">
@@ -1562,6 +1670,25 @@ function copyJsonToClipboard() {
   });
 }
 
+function copyMainJsonToClipboard() {
+  if (!lastMainJson) return;
+  const btn = document.getElementById("copy-main-json-btn");
+  const text = JSON.stringify(lastMainJson, null, 2);
+
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("copied");
+    }, 1500);
+  }).catch(() => {
+    btn.textContent = "Copy failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+  });
+}
+
 function switchTab(name) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
@@ -1582,7 +1709,7 @@ function resetNodes() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function routeTicketRequest(id, subject, description, simulateFailure, attachment) {
+async function routeTicketRequest(id, subject, description, simulateFailure, attachment, customer) {
   const payload = { id, subject, description, simulate_failure: !!simulateFailure };
   // attachment is optional -- only the Single Ticket tab ever passes one.
   // { filename, mimeType, dataBase64 } all three or omitted entirely.
@@ -1591,6 +1718,10 @@ async function routeTicketRequest(id, subject, description, simulateFailure, att
     payload.attachment_mime_type = attachment.mimeType;
     payload.attachment_data_base64 = attachment.dataBase64;
   }
+  // customer is optional -- { name, email }, either or both blank.
+  // Purely informational: never used for auth or routing.
+  if (customer && customer.name) payload.customer_name = customer.name;
+  if (customer && customer.email) payload.customer_email = customer.email;
   const response = await fetch("/tickets/route", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1687,7 +1818,7 @@ function renderRagContext(retrievedContext) {
 
   entries.innerHTML = retrievedContext.map(item => `
     <div class="rag-entry">
-      <span class="rag-subject">${item.subject}</span>
+      <span class="rag-subject">${escapeHtml(item.subject)}</span>
       <span class="rag-meta">${item.category} &middot; ${item.assigned_team} &middot; ${item.priority}</span>
       <span class="rag-score">similarity ${item.similarity_score}</span>
     </div>
@@ -1734,6 +1865,61 @@ function getMySubmittedTicketIds() {
   }
 }
 
+// --- Contact Us modal -- a small, always-available escalation path.
+// Submitting this files a real ticket through the same /tickets/route
+// pipeline as the main form (customer_name/customer_email set from the
+// name/contact fields, description from the issue text) -- it does NOT
+// send an email, since email/SLA/auth are explicitly out of scope here.
+function openContactModal() {
+  document.getElementById("contact-modal-error").style.display = "none";
+  document.getElementById("contact-name").value = "";
+  document.getElementById("contact-email").value = "";
+  document.getElementById("contact-issue").value = "";
+  document.getElementById("contact-modal-overlay").classList.add("open");
+}
+
+function closeContactModal() {
+  document.getElementById("contact-modal-overlay").classList.remove("open");
+}
+
+async function submitContactForm() {
+  const name = document.getElementById("contact-name").value.trim();
+  const email = document.getElementById("contact-email").value.trim();
+  const issue = document.getElementById("contact-issue").value.trim();
+  const errorEl = document.getElementById("contact-modal-error");
+  const btn = document.getElementById("contact-submit-btn");
+  errorEl.style.display = "none";
+
+  if (!issue) {
+    errorEl.textContent = "Please describe the issue before sending.";
+    errorEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  try {
+    const ticketId = generateTicketId();
+    await routeTicketRequest(
+      ticketId,
+      "Contact form submission",
+      issue,
+      false,
+      null,
+      { name, email }
+    );
+    recordMySubmittedTicket(ticketId);
+    closeContactModal();
+    alert(`Thanks -- we've filed this as ticket ${ticketId}. You can look it up any time on the "Track a ticket" tab.`);
+  } catch (err) {
+    errorEl.textContent = "Something went wrong sending this -- please try again.";
+    errorEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send";
+  }
+}
+
 async function routeTicket() {
   const subject = document.getElementById("subject-input").value;
   const description = document.getElementById("description-input").value;
@@ -1764,7 +1950,11 @@ async function routeTicket() {
   setNodeState("node-review", "pending", "Waiting...");
 
   try {
-    const data = await routeTicketRequest(newTicketId, subject, description, simulateFailure, attachment);
+    const customer = {
+      name: document.getElementById("customer-name-input").value.trim(),
+      email: document.getElementById("customer-email-input").value.trim(),
+    };
+    const data = await routeTicketRequest(newTicketId, subject, description, simulateFailure, attachment, customer);
     const r = data.result;
     const trace = data.trace || [];
     renderRetryLog(data.retry_log || []);
@@ -1799,6 +1989,18 @@ async function routeTicket() {
     const [sColor, sBg] = sentimentColors[r.sentiment] || sentimentColors["Neutral"];
 
     lastRoutingResponse = data;
+    // A trimmed-down companion to the raw JSON above -- just the core
+    // routing metrics (id, category, priority, sentiment, confidence,
+    // review flag), for anyone who wants the headline numbers without
+    // the trace/retry_log/retrieved_context noise.
+    lastMainJson = {
+      id: newTicketId,
+      category: r.category,
+      priority: r.priority,
+      sentiment: r.sentiment,
+      confidence_score: r.confidence_score,
+      needs_human_review: r.needs_human_review,
+    };
 
     const aiTimeMs = trace.reduce((sum, step) => sum + step.duration_ms, 0);
     const manualMinutes = getManualMinutes();
@@ -1822,7 +2024,7 @@ async function routeTicket() {
       <div class="placeholder-text" style="margin-top:4px;">Submitted just now.</div>
       <div id="assignment-note" class="placeholder-text" style="margin-top:2px;">Checking assignment...</div>
       ${attachment ? `<div style="margin-top:6px;"><a href="/tickets/${newTicketId}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${attachment.filename})</a></div>` : ""}
-      <p style="margin-top:14px; color:#374151; font-size:0.92rem;">${r.reason}</p>
+      <p style="margin-top:14px; color:#374151; font-size:0.92rem;">${escapeHtml(r.reason)}</p>
       <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">AI Confidence</div>
       <div class="confidence-mono">${r.confidence_score}<span style="font-size:1rem; color:#9CA3AF;"> / 100</span></div>
       <div class="time-savings-note">Routed in ${aiTimeMs.toFixed(0)}ms -- an estimated ${savedSec}s faster than manual triage (~${manualMinutes} min/ticket assumption).</div>
@@ -1832,6 +2034,13 @@ async function routeTicket() {
           <button class="copy-btn" id="copy-json-btn" onclick="copyJsonToClipboard()">Copy</button>
         </div>
         <pre id="json-output">${JSON.stringify(data, null, 2)}</pre>
+      </div>
+      <div class="json-box" style="margin-top:0.8rem;">
+        <div class="json-box-header">
+          <span class="json-box-label">Main JSON (key metrics only)</span>
+          <button class="copy-btn" id="copy-main-json-btn" onclick="copyMainJsonToClipboard()">Copy</button>
+        </div>
+        <pre id="main-json-output">${JSON.stringify(lastMainJson, null, 2)}</pre>
       </div>
     `;
 
@@ -1865,7 +2074,7 @@ async function fetchAndShowAssignment(ticketId) {
     if (!response.ok) throw new Error(`${response.status}`);
     const t = await response.json();
     noteEl.textContent = t.assigned_employee_name
-      ? `Auto-assigned to ${t.assigned_employee_name} -- ${t.assigned_department_name} department.`
+      ? `Auto-assigned to ${escapeHtml(t.assigned_employee_name)} -- ${escapeHtml(t.assigned_department_name)} department.`
       : "Not yet assigned to anyone -- an admin can assign it from the Admin View.";
 
     // The status pill shown right after submission always starts as a
@@ -1961,7 +2170,7 @@ async function routeBatch() {
 
   let rowsHtml = results.map(r => `
     <tr>
-      <td>${r.id}</td><td>${r.subject}</td><td>${r.category}</td><td>${r.priority}</td>
+      <td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.subject)}</td><td>${r.category}</td><td>${r.priority}</td>
       <td>${r.assigned_team}</td><td>${r.sentiment}</td><td>${r.confidence_score}</td><td>${r.needs_human_review}</td>
       <td>${r.status === "ok" ? r.time_saved_sec + "s" : "-"}</td><td>${r.status}</td>
     </tr>
@@ -2054,6 +2263,26 @@ function copyTicketIdToClipboard(ticketId, btn) {
   });
 }
 
+async function submitSatisfactionRating(ticketId, rating) {
+  const block = document.getElementById(`csat-block-${ticketId}`);
+  if (block) block.innerHTML = '<p class="placeholder-text">Saving your rating...</p>';
+  try {
+    const response = await fetch(`/tickets/${ticketId}/satisfaction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating }),
+    });
+    if (!response.ok) throw new Error(`${response.status}`);
+    // Re-render the detail panel so it picks up satisfaction_rating from
+    // the server and swaps the stars for the read-only thank-you message.
+    await showPastTicketDetail(ticketId);
+  } catch (err) {
+    if (block) {
+      block.innerHTML = `<p class="error-text">Couldn't save your rating -- please try again.</p>`;
+    }
+  }
+}
+
 async function showPastTicketDetail(ticketId) {
   document.querySelectorAll("#past-kanban-board .kanban-card").forEach(r => r.classList.remove("selected"));
   const card = document.getElementById(`past-card-${ticketId}`);
@@ -2087,9 +2316,31 @@ async function showPastTicketDetail(ticketId) {
 
     const hasOverride = t.admin_category || t.admin_priority || t.admin_team;
 
+    // CSAT -- only meaningful once a ticket is actually resolved. Once
+    // rated, show a read-only thank-you instead of the rating control
+    // (rate-once UX; the endpoint itself is still idempotent server-side).
+    const isResolved = t.status === "Resolved" || t.status === "Closed";
+    let satisfactionHtml = "";
+    if (t.satisfaction_rating != null) {
+      satisfactionHtml = `
+        <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Your rating</div>
+        <p style="color:#059669; font-size:0.88rem; margin-top:6px; font-weight:600;">You rated this ${t.satisfaction_rating} / 5 -- thanks for the feedback!</p>
+      `;
+    } else if (isResolved) {
+      const stars = [1, 2, 3, 4, 5].map(n => `
+        <button class="csat-star-btn" onclick="submitSatisfactionRating('${t.id}', ${n})" title="${n} / 5" aria-label="Rate ${n} out of 5">&#9733;</button>
+      `).join("");
+      satisfactionHtml = `
+        <div id="csat-block-${t.id}" style="margin-top:16px;">
+          <div style="color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">How did we do?</div>
+          <div>${stars}</div>
+        </div>
+      `;
+    }
+
     detailDiv.innerHTML = `
-      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${t.subject}</p>
-      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 6px 0;">${t.description}</p>
+      <p style="font-weight:700; font-size:1rem; margin:0 0 6px 0;">${escapeHtml(t.subject)}</p>
+      <p style="color:#4B5563; font-size:0.88rem; margin:0 0 6px 0;">${escapeHtml(t.description)}</p>
       <div class="placeholder-text" style="margin-bottom:12px;">Submitted ${submittedStr}</div>
       <span class="status-pill" style="background:${sBg}; color:${sColor}; padding:5px 14px; margin-right:8px;">${t.status || "New"}</span>
       <span class="badge-pill" style="background:#F3F0FA; color:#6D5BD0;">${hasOverride && t.admin_category ? t.admin_category : t.category}</span>
@@ -2098,15 +2349,17 @@ async function showPastTicketDetail(ticketId) {
       <span class="badge-pill" style="background:#EFF4FF; color:#3454F4;">${hasOverride && t.admin_team ? t.admin_team : t.assigned_team}</span>
       <span class="badge-pill" style="background:${reviewBg}; color:${reviewColor};">${reviewText}</span>
       ${hasOverride ? `<div class="placeholder-text" style="margin-top:6px;">An agent corrected the AI's original call: ${t.category} / ${t.priority} / ${t.assigned_team}.</div>` : ""}
-      ${t.assigned_employee_name ? `<div class="placeholder-text" style="margin-top:6px;">Assigned to ${t.assigned_employee_name} -- ${t.assigned_department_name} department.</div>` : ""}
-      ${t.attachment_filename ? `<div style="margin-top:8px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${t.attachment_filename})</a></div>` : ""}
-      <p style="margin-top:12px; color:#374151; font-size:0.88rem;">${t.reason}</p>
+      ${t.assigned_employee_name ? `<div class="placeholder-text" style="margin-top:6px;">Assigned to ${escapeHtml(t.assigned_employee_name)} -- ${escapeHtml(t.assigned_department_name)} department.</div>` : ""}
+      ${(t.customer_name || t.customer_email) ? `<div class="placeholder-text" style="margin-top:6px;">Submitted by: ${escapeHtml(t.customer_name || "(no name given)")}${t.customer_email ? " -- " + escapeHtml(t.customer_email) : ""}</div>` : ""}
+      ${t.attachment_filename ? `<div style="margin-top:8px;"><a href="/tickets/${t.id}/attachment" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none; display:inline-block;">View attachment (${escapeHtml(t.attachment_filename)})</a></div>` : ""}
+      <p style="margin-top:12px; color:#374151; font-size:0.88rem;">${escapeHtml(t.reason)}</p>
       <div style="margin-top:10px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">AI Confidence</div>
       <div class="confidence-mono" style="font-size:1.3rem;">${t.confidence_score}<span style="font-size:0.85rem; color:#9CA3AF;"> / 100</span></div>
       ${t.resolution_comment ? `
         <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Resolution note</div>
-        <p style="color:#374151; font-size:0.88rem; margin-top:6px;">${t.resolution_comment}</p>
+        <p style="color:#374151; font-size:0.88rem; margin-top:6px;">${escapeHtml(t.resolution_comment)}</p>
       ` : ""}
+      ${satisfactionHtml}
       <div style="margin-top:16px; color:#6B7280; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.05em;">Agent trace</div>
       ${traceHtml}
     `;

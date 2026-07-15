@@ -9,5 +9,6 @@ sqlalchemy
 numpy
 pytest
 pytest-asyncio
+pytest-cov
 httpx
 pandas
